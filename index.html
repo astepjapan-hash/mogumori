@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#4A7C59">
+<title>モグもり 🌿 食品安全チェッカー</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="モグもり">
+<style>
+/* ============================================================
+   デザイン設定(緑・ナチュラル系)
+   ============================================================ */
+:root {
+  --bg: #FAFAF5;          /* ベースの白 */
+  --main: #4A7C59;        /* メインの緑 */
+  --accent: #8FBC8F;      /* アクセントの若草色 */
+  --text: #333;           /* 文字色 */
+  --v-best: #2E7D32;      /* ◎ 濃緑 */
+  --v-good: #7CB342;      /* ○ 黄緑 */
+  --v-warn: #F9A825;      /* △ オレンジ */
+  --v-bad:  #C62828;      /* × 赤 */
+  --card: #FFFFFF;
+  --line: #E4E4DC;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { font-size: 16px; }
+body {
+  font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  padding-bottom: calc(70px + env(safe-area-inset-bottom));
+}
+header {
+  background: var(--main);
+  color: #fff;
+  padding: 14px 16px calc(14px);
+  padding-top: calc(14px + env(safe-area-inset-top));
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  position: sticky; top: 0; z-index: 50;
+}
+main { max-width: 560px; margin: 0 auto; padding: 16px 14px 24px; }
+h2 { font-size: 1.02rem; color: var(--main); margin: 18px 0 10px; }
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  min-height: 44px;         /* タップ領域44px以上 */
+}
+.btn-main {
+  width: 100%;
+  background: var(--main);
+  color: #fff;
+  padding: 13px;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.btn-main:active { opacity: 0.85; }
+.btn-sub {
+  background: #EFF3EC;
+  color: var(--main);
+  padding: 10px 14px;
+  font-weight: 600;
+}
+.btn-danger { background: #FBEAEA; color: var(--v-bad); padding: 8px 12px; font-size: 0.9rem; }
+.btn-small { padding: 8px 12px; font-size: 0.9rem; min-height: 40px; }
+input[type=text], input[type=password], select, textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 11px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  min-height: 44px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+label { font-size: 0.88rem; font-weight: 600; color: #556; display: block; margin: 10px 0 4px; }
+.note { font-size: 0.8rem; color: #777; margin-top: 6px; }
+.hidden { display: none !important; }
+
+/* 入力方法の切り替えタブ */
+.mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.mode-tab {
+  flex: 1;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  color: #667;
+  border-radius: 12px;
+  padding: 10px 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.mode-tab.active { background: var(--main); border-color: var(--main); color: #fff; }
+.mode-tab .emoji { display: block; font-size: 1.3rem; margin-bottom: 2px; }
+
+/* 判定結果 */
+.verdict-circle {
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  margin: 6px auto 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3.4rem; font-weight: 800; color: #fff;
+}
+.verdict-label { text-align: center; font-weight: 700; font-size: 1.1rem; margin-bottom: 8px; }
+.verdict-summary { font-size: 0.95rem; background: #F4F7F2; border-radius: 12px; padding: 12px; }
+.badge {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  vertical-align: middle;
+}
+.badge.high { background: var(--v-bad); }
+.badge.medium { background: var(--v-warn); }
+.badge.low { background: var(--v-good); }
+.badge.none { background: #9AA; }
+.src-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  color: #789;
+  border: 1px solid #CCD5CC;
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.ing-item { border-top: 1px solid var(--line); padding: 10px 2px; }
+.ing-item:first-child { border-top: none; }
+.ing-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; }
+.ing-name { font-size: 0.95rem; font-weight: 600; flex: 1; }
+.ing-detail { font-size: 0.85rem; color: #555; background: #F7F8F4; border-radius: 10px; padding: 10px; margin-top: 8px; }
+.yondoku-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.yondoku-cell {
+  border-radius: 12px; padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600;
+  background: #F0F5EE; color: var(--main);
+}
+.yondoku-cell.hit { background: #FDEFD8; color: #B26A00; }
+.disclaimer { font-size: 0.75rem; color: #999; text-align: center; margin-top: 14px; }
+
+/* 履歴・お気に入り */
+.list-item { border-top: 1px solid var(--line); padding: 12px 2px; }
+.list-item:first-child { border-top: none; }
+.list-head { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.list-verdict {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 1.2rem;
+}
+.list-title { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+.list-date { font-size: 0.75rem; color: #999; }
+.list-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* 下部タブ */
+nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  display: flex;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 100;
+}
+nav button {
+  flex: 1;
+  background: none;
+  border-radius: 0;
+  padding: 8px 0 6px;
+  font-size: 0.7rem;
+  color: #99A;
+  font-weight: 600;
+  line-height: 1.2;
+}
+nav button .emoji { display: block; font-size: 1.35rem; margin-bottom: 1px; }
+nav button.active { color: var(--main); }
+
+/* ローディング */
+#loading {
+  position: fixed; inset: 0;
+  background: rgba(250,250,245,0.92);
+  z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px;
+}
+.spinner {
+  width: 46px; height: 46px;
+  border: 5px solid var(--accent);
+  border-top-color: var(--main);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-text { font-weight: 700; color: var(--main); }
+
+/* NG成分リスト */
+.ng-item { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding: 9px 2px; gap: 8px; }
+.ng-item:first-child { border-top: none; }
+.toast {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+  background: #333; color: #fff; padding: 10px 18px; border-radius: 20px;
+  font-size: 0.9rem; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  max-width: 90%; text-align: center;
+}
+.toast.show { opacity: 0.95; }
+.alert-box { background: #FBEAEA; color: var(--v-bad); border-radius: 12px; padding: 12px; font-size: 0.9rem; margin-bottom: 12px; }
+.info-box { background: #FFF7E6; color: #8a6d1a; border-radius: 12px; padding: 12px; font-size: 0.88rem; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<header>🌿 モグもり</header>
+
+<main>
+  <!-- ============================================================
+       画面1:チェック(ホーム)
+       ============================================================ -->
+  <section id="view-check">
+    <div class="card">
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="mode-text" onclick="setMode('text')"><span class="emoji">⌨️</span>商品名で<br>チェック</button>
+        <button class="mode-tab" id="mode-label" onclick="setMode('label')"><span class="emoji">📷</span>原材料ラベル<br>を撮影</button>
+        <button class="mode-tab" id="mode-package" onclick="setMode('package')"><span class="emoji">📦</span>パッケージ<br>を撮影</button>
+      </div>
+
+      <!-- 商品名テキスト入力 -->
+      <div id="input-text-area">
+        <input type="text" id="product-name-input" placeholder="例:〇〇ハム あらびきウインナー" autocomplete="off">
+        <p class="note">商品名から一般的な原材料をAIが推定して判定します(推定のため実物と異なる場合があります)</p>
+        <div style="margin-top:10px">
+          <button class="btn-main" onclick="startTextCheck()">🔍 この商品をチェック</button>
+        </div>
+      </div>
+
+      <!-- 写真入力(ラベル/パッケージ共通) -->
+      <div id="input-photo-area" class="hidden">
+        <p class="note" id="photo-guide">原材料表示のラベル部分を、なるべく大きくハッキリ撮影してください。</p>
+        <div style="margin-top:10px">
+          <button class="btn-main" onclick="document.getElementById('photo-input').click()">📷 カメラで撮影する</button>
+        </div>
+        <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="startPhotoCheck(this)">
+      </div>
+
+      <div id="offline-notice" class="info-box hidden" style="margin-top:12px">
+        📴 現在オフラインです。AI判定は使えませんが、テキスト入力なら登録データベースとの照合だけで簡易判定できます(原材料名を「、」区切りで入力してください)。
+      </div>
+    </div>
+
+    <!-- 判定結果の表示エリア -->
+    <div id="result-area"></div>
+  </section>
+
+  <!-- ============================================================
+       画面2:履歴
+       ============================================================ -->
+  <section id="view-history" class="hidden">
+    <h2>📋 チェック履歴(最新200件)</h2>
+    <div class="card" id="history-list"><p class="note">まだ履歴がありません。</p></div>
+  </section>
+
+  <!-- ============================================================
+       画面3:お気に入り(OK食品リスト)
+       ============================================================ -->
+  <section id="view-favorites" class="hidden">
+    <h2>⭐ お気に入り(OK食品リスト)</h2>
+    <div class="card">
+      <input type="text" id="fav-search" placeholder="🔍 名前で検索" oninput="renderFavorites()">
+    </div>
+    <div class="card" id="favorites-list"><p class="note">まだお気に入りがありません。◎や○の食品を保存しておきましょう。</p></div>
+  </section>
+
+  <!-- ============================================================
+       画面4:設定
+       ============================================================ -->
+  <section id="view-settings" class="hidden">
+    <h2>⚙️ 設定</h2>
+
+    <div class="card">
+      <label>Anthropic APIキー(AI判定に必要)</label>
+      <input type="password" id="api-key-input" placeholder="sk-ant-... を貼り付け" autocomplete="off">
+      <p class="note">キーはこのスマホの中(localStorage)にだけ保存されます。外部のデータベースには保存されません。</p>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <button class="btn-sub" style="flex:1" onclick="saveApiKey()">💾 保存</button>
+        <button class="btn-sub" style="flex:1" onclick="testApiKey()">📡 接続テスト</button>
+      </div>
+      <label style="margin-top:14px">AIモデル</label>
+      <select id="model-select" onchange="saveModel()">
+        <option value="claude-sonnet-4-6">標準(claude-sonnet-4-6/写真の読み取り精度優先)</option>
+        <option value="claude-haiku-4-5-20251001">低コスト(claude-haiku-4-5/速い・安い)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0">四毒チェック(砂糖・小麦・乳製品・精製植物油)</label>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:6px">
+        <input type="checkbox" id="yondoku-toggle" style="width:22px;height:22px;min-height:22px" onchange="saveYondokuToggle()">
+        <span style="font-size:0.92rem">四毒の含有チェックを行う</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0">🚫 カスタムNG成分(含まれていたら×判定)</label>
+      <div id="ng-list"><p class="note">登録なし</p></div>
+      <label>成分名を追加</label>
+      <input type="text" id="ng-name-input" placeholder="例:トランス脂肪酸">
+      <label>別名(カンマ区切り・任意)</label>
+      <input type="text" id="ng-alias-input" placeholder="例:ショートニング,ファットスプレッド">
+      <div style="margin-top:10px">
+        <button class="btn-sub" style="width:100%" onclick="addCustomNG()">➕ NG成分を追加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0">💾 データ管理(バックアップ/復元)</label>
+      <p class="note">履歴・お気に入り・カスタムNG成分を1つのファイルに書き出し/読み込みできます。</p>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <button class="btn-sub" style="flex:1" onclick="exportBackup()">⬇️ 書き出し</button>
+        <button class="btn-sub" style="flex:1" onclick="document.getElementById('restore-input').click()">⬆️ 復元</button>
+      </div>
+      <input type="file" id="restore-input" accept="application/json,.json" class="hidden" onchange="importBackup(this)">
+      <p class="note" id="storage-mode-note"></p>
+    </div>
+
+    <p class="disclaimer">モグもり v1.0<br>本判定は参考情報です。最終的な判断はご自身で行ってください。</p>
+  </section>
+</main>
+
+<!-- 下部タブ(4つ) -->
+<nav>
+  <button id="tab-check" class="active" onclick="switchTab('check')"><span class="emoji">🔍</span>チェック</button>
+  <button id="tab-history" onclick="switchTab('history')"><span class="emoji">📋</span>履歴</button>
+  <button id="tab-favorites" onclick="switchTab('favorites')"><span class="emoji">⭐</span>お気に入り</button>
+  <button id="tab-settings" onclick="switchTab('settings')"><span class="emoji">⚙️</span>設定</button>
+</nav>
+
+<!-- ローディング画面 -->
+<div id="loading" class="hidden">
+  <div class="spinner"></div>
+  <div id="loading-text">判定中…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase(読み込みに失敗してもアプリは動くようにガードしています) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+/* ============================================================
+   1. Firebase の設定
+   ------------------------------------------------------------
+   Firebaseコンソールで作ったプロジェクトの設定値を
+   下の firebaseConfig に貼り付けてください(README参照)。
+   貼り付けなくても、このスマホの中だけにデータを保存する
+   モード(localStorage)で全機能が動きます。
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "ここにFirebaseのapiKeyを貼り付け",
+  authDomain: "ここに貼り付け.firebaseapp.com",
+  databaseURL: "https://ここに貼り付け-default-rtdb.firebaseio.com",
+  projectId: "ここに貼り付け",
+  storageBucket: "ここに貼り付け.appspot.com",
+  messagingSenderId: "ここに貼り付け",
+  appId: "ここに貼り付け"
+};
+
+// Firebaseが設定済みか(貼り付け前のままなら未設定と判断)
+let db = null;
+let useFirebase = false;
+try {
+  if (typeof firebase !== "undefined" && !firebaseConfig.apiKey.startsWith("ここに")) {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    useFirebase = true;
+  }
+} catch (e) {
+  console.warn("Firebase初期化に失敗したため、端末内保存モードで動きます", e);
+  useFirebase = false;
+}
+
+/* ============================================================
+   2. 定数(判定の基準になるデータ)
+   ============================================================ */
+
+// 判定マークの表示設定
+const VERDICTS = {
+  "◎": { color: "#2E7D32", label: "安心(添加物なし・四毒なし)" },
+  "○": { color: "#7CB342", label: "ほぼ安心(低リスクの添加物のみ)" },
+  "△": { color: "#F9A825", label: "注意(気になる成分あり)" },
+  "×": { color: "#C62828", label: "避けたい(要注意成分あり)" }
+};
+
+// デンマーク/EUでの扱いの日本語表示
+const DK_LABELS = {
+  banned: "🇩🇰 EU/デンマークで禁止・未承認",
+  restricted: "🇩🇰 EU/デンマークで使用制限あり",
+  warning: "🇩🇰 EUで警告表示義務あり",
+  approved: "🇩🇰 EU/デンマークで承認済み"
+};
+
+// リスクレベルの表示
+const RISK_LABELS = { high: "×要注意", medium: "△注意", low: "○低リスク" };
+
+/* 四毒の判定キーワード
+   ※ ごま油・米油・えごま油は「精製植物油」の判定から除外します */
+const YONDOKU = {
+  sugar: {
+    label: "砂糖",
+    emoji: "🍬",
+    keywords: ["砂糖", "グラニュー糖", "上白糖", "三温糖", "黒糖", "きび糖", "てんさい糖",
+      "果糖ぶどう糖液糖", "ぶどう糖果糖液糖", "異性化液糖", "高果糖液糖", "水あめ", "水飴",
+      "ぶどう糖", "果糖", "液糖", "転化糖", "加糖", "シロップ", "糖蜜"],
+    exclude: []
+  },
+  wheat: {
+    label: "小麦",
+    emoji: "🌾",
+    keywords: ["小麦", "小麦粉", "小麦たん白", "小麦たんぱく", "小麦グルテン", "グルテン",
+      "パン粉", "薄力粉", "強力粉", "中力粉", "全粒粉", "デュラム", "セモリナ"],
+    exclude: []
+  },
+  dairy: {
+    label: "乳製品",
+    emoji: "🥛",
+    keywords: ["牛乳", "生乳", "脱脂粉乳", "全粉乳", "粉乳", "ホエイ", "乳清", "チーズ",
+      "バター", "クリーム", "乳糖", "練乳", "ヨーグルト", "発酵乳", "はっ酵乳", "乳たんぱく", "乳たん白",
+      "カゼイン", "乳製品", "脱脂乳", "加糖れん乳", "アイスクリーム", "乳等を主要原料とする食品", "乳成分"],
+    exclude: ["乳化剤", "乳化", "乳酸菌", "乳酸Na", "乳酸ナトリウム", "乳酸Ca", "乳酸カルシウム", "乳酸", "豆乳", "植物性クリーム"]
+  },
+  oil: {
+    label: "精製植物油",
+    emoji: "🛢️",
+    keywords: ["植物油脂", "植物油", "食用植物油脂", "食用調合油", "サラダ油", "菜種油", "なたね油",
+      "キャノーラ油", "大豆油", "コーン油", "とうもろこし油", "パーム油", "パーム核油",
+      "ひまわり油", "紅花油", "サフラワー油", "綿実油", "ショートニング", "マーガリン",
+      "ファットスプレッド", "加工油脂", "精製加工油脂"],
+    exclude: ["ごま油", "ゴマ油", "胡麻油", "米油", "こめ油", "米ぬか油", "えごま油", "エゴマ油", "荏胡麻油"]
+  }
+};
+
+/* ============================================================
+   3. アプリの状態と共通の小道具
+   ============================================================ */
+let MASTER = [];          // additives.json の中身(添加物マスタ)
+let currentMode = "text"; // 入力方法: text / label / package
+let lastResult = null;    // 直近の判定結果(お気に入り保存用)
+
+// 文字のゆらぎをそろえる(全角→半角、大文字→小文字、空白除去)
+function norm(s) {
+  return String(s || "").normalize("NFKC").toLowerCase().replace(/[\s　]/g, "");
+}
+
+function $(id) { return document.getElementById(id); }
+
+function showToast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function setLoading(text) {
+  if (text === null) { $("loading").classList.add("hidden"); return; }
+  $("loading-text").textContent = text;
+  $("loading").classList.remove("hidden");
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/* ============================================================
+   4. データ保存のしくみ
+   ------------------------------------------------------------
+   Firebaseが設定されていればFirebaseに、
+   未設定ならこのスマホの中(localStorage)に保存します。
+   保存する場所: /foodChecker/history, /favorites, /customNG
+   ============================================================ */
+const store = {
+  // ローカル保存の読み書き
+  _localGet(name) {
+    try { return JSON.parse(localStorage.getItem("tabemamori_" + name) || "{}"); }
+    catch (e) { return {}; }
+  },
+  _localSet(name, obj) {
+    localStorage.setItem("tabemamori_" + name, JSON.stringify(obj));
+  },
+
+  // 1件追加(戻り値は保存キー)
+  async add(name, item) {
+    if (useFirebase) {
+      const ref = db.ref("foodChecker/" + name).push();
+      await ref.set(item);
+      return ref.key;
+    }
+    const all = this._localGet(name);
+    const key = "k" + Date.now() + Math.random().toString(36).slice(2, 7);
+    all[key] = item;
+    this._localSet(name, all);
+    return key;
+  },
+
+  // 全件取得([{key, ...データ}] の形で返す)
+  async list(name) {
+    let obj = {};
+    if (useFirebase) {
+      const snap = await db.ref("foodChecker/" + name).get();
+      obj = snap.val() || {};
+    } else {
+      obj = this._localGet(name);
+    }
+    return Object.keys(obj).map(k => Object.assign({ key: k }, obj[k]));
+  },
+
+  // 1件削除
+  async remove(name, key) {
+    if (useFirebase) {
+      await db.ref("foodChecker/" + name + "/" + key).remove();
+      return;
+    }
+    const all = this._localGet(name);
+    delete all[key];
+    this._localSet(name, all);
+  },
+
+  // まるごと入れ替え(復元用)
+  async replaceAll(name, items) {
+    if (useFirebase) {
+      await db.ref("foodChecker/" + name).set(null);
+      for (const item of items) {
+        const copy = Object.assign({}, item);
+        delete copy.key;
+        await db.ref("foodChecker/" + name).push(copy);
+      }
+      return;
+    }
+    const obj = {};
+    items.forEach((item, i) => {
+      const copy = Object.assign({}, item);
+      delete copy.key;
+      obj["r" + Date.now() + "_" + i] = copy;
+    });
+    this._localSet(name, obj);
+  }
+};
+
+/* ============================================================
+   5. 設定(APIキー・モデル・四毒ON/OFF)
+   ------------------------------------------------------------
+   APIキーは絶対にFirebaseに保存しません(localStorageのみ)。
+   ============================================================ */
+function getApiKey() { return localStorage.getItem("tabemamori_apikey") || ""; }
+function getModel() { return localStorage.getItem("tabemamori_model") || "claude-sonnet-4-6"; }
+function isYondokuOn() { return localStorage.getItem("tabemamori_yondoku") !== "off"; } // 初期値ON
+
+function saveApiKey() {
+  const v = $("api-key-input").value.trim();
+  if (!v) { showToast("APIキーを入力してください"); return; }
+  localStorage.setItem("tabemamori_apikey", v);
+  showToast("APIキーを保存しました");
+}
+
+function saveModel() {
+  localStorage.setItem("tabemamori_model", $("model-select").value);
+  showToast("モデルを切り替えました");
+}
+
+function saveYondokuToggle() {
+  localStorage.setItem("tabemamori_yondoku", $("yondoku-toggle").checked ? "on" : "off");
+}
+
+// 接続テスト:小さなリクエストを1回送って動作確認する
+async function testApiKey() {
+  const key = $("api-key-input").value.trim() || getApiKey();
+  if (!key) { showToast("先にAPIキーを入力してください"); return; }
+  setLoading("接続をテストしています…");
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: apiHeaders(key),
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: 16,
+        messages: [{ role: "user", content: "こんにちは" }]
+      })
+    });
+    if (res.ok) {
+      showToast("✅ 接続OK!AI判定が使えます");
+    } else if (res.status === 401) {
+      showToast("❌ APIキーが正しくありません");
+    } else if (res.status === 429 || res.status === 529) {
+      showToast("⚠️ 混み合っています。少し待って再試行してください");
+    } else {
+      showToast("❌ エラー(" + res.status + ")が発生しました");
+    }
+  } catch (e) {
+    showToast("❌ 通信できません。電波状況を確認してください");
+  } finally {
+    setLoading(null);
+  }
+}
+
+/* ============================================================
+   6. Claude API(AI)の呼び出し
+   ============================================================ */
+function apiHeaders(key) {
+  return {
+    "x-api-key": key,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+    "anthropic-dangerous-direct-browser-access": "true" // ブラウザから直接呼ぶために必須
+  };
+}
+
+// AIを呼び出して返答テキストを受け取る(エラーは日本語メッセージにして投げる)
+async function callClaude(messages, maxTokens) {
+  const key = getApiKey();
+  if (!key) {
+    const err = new Error("設定タブでAPIキーを登録してください");
+    err.needKey = true;
+    throw err;
+  }
+  if (!navigator.onLine) {
+    throw new Error("オフラインのためAI判定は使えません。テキスト入力ならDB照合のみで簡易判定できます");
+  }
+  let res;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: apiHeaders(key),
+      body: JSON.stringify({ model: getModel(), max_tokens: maxTokens || 3000, messages })
+    });
+  } catch (e) {
+    throw new Error("通信エラーです。電波状況を確認して再試行してください");
+  }
+  if (res.status === 401) throw new Error("APIキーが正しくありません");
+  if (res.status === 429 || res.status === 529) throw new Error("混み合っています。少し待って再試行してください");
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json()).error.message || ""; } catch (e) {}
+    throw new Error("AI判定でエラーが発生しました(" + res.status + ")" + (detail ? ":" + detail : ""));
+  }
+  const data = await res.json();
+  return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+// AIの返答からJSONを取り出す(```json などの飾りが付いていても対応)
+function parseJsonLoose(text) {
+  let t = String(text || "").trim();
+  t = t.replace(/^```(?:json)?/i, "").replace(/```\s*$/, "").trim();
+  const objStart = t.indexOf("{");
+  const arrStart = t.indexOf("[");
+  let start = -1, end = -1;
+  if (arrStart !== -1 && (objStart === -1 || arrStart < objStart)) {
+    start = arrStart; end = t.lastIndexOf("]");
+  } else if (objStart !== -1) {
+    start = objStart; end = t.lastIndexOf("}");
+  }
+  if (start === -1 || end === -1 || end < start) throw new Error("JSONが見つかりません");
+  return JSON.parse(t.slice(start, end + 1));
+}
+
+// JSONで答えてもらう呼び出し。失敗したら1回だけ再試行する
+async function callClaudeJson(messages, maxTokens) {
+  const text = await callClaude(messages, maxTokens);
+  try {
+    return parseJsonLoose(text);
+  } catch (e) {
+    const retryMessages = messages.concat([
+      { role: "assistant", content: text.slice(0, 3000) || "(空)" },
+      { role: "user", content: "出力がJSONとして読み取れませんでした。前置き・説明・コードブロックなしで、JSONだけをもう一度出力してください。" }
+    ]);
+    const text2 = await callClaude(retryMessages, maxTokens);
+    return parseJsonLoose(text2);
+  }
+}
+
+/* ============================================================
+   7. 写真の圧縮(通信量とAPI費用の節約)
+   ------------------------------------------------------------
+   長辺1568px以下・JPEG品質0.8に縮小してから送ります。
+   ============================================================ */
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1568;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const long = Math.max(w, h);
+      if (long > MAX) {
+        const scale = MAX / long;
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      resolve(dataUrl.split(",")[1]); // base64部分だけ返す
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("画像を読み込めませんでした")); };
+    img.src = url;
+  });
+}
+
+/* ============================================================
+   8. 添加物マスタ(additives.json)との照合
+   ============================================================ */
+async function loadMaster() {
+  try {
+    const res = await fetch("additives.json");
+    const data = await res.json();
+    MASTER = data.additives || [];
+  } catch (e) {
+    console.warn("additives.json を読み込めませんでした", e);
+    MASTER = [];
+  }
+}
+
+/* 原材料名からマスタの添加物を探す。
+   1) 完全一致を最優先
+   2) 部分一致(原材料名の中に別名が含まれる)は、一番長い別名の項目を採用 */
+function findAdditive(ingredient) {
+  const n = norm(ingredient);
+  if (!n) return null;
+  let best = null, bestLen = 0;
+  for (const a of MASTER) {
+    const names = [a.name].concat(a.aliases || []);
+    if (a.eNumber) names.push(a.eNumber);
+    for (const nm of names) {
+      const m = norm(nm);
+      if (!m) continue;
+      if (n === m) return a;                       // 完全一致は即決定
+      if (m.length >= 3 && n.includes(m) && m.length > bestLen) {
+        best = a; bestLen = m.length;              // 部分一致は最長を採用
+      }
+    }
+  }
+  return best;
+}
+
+/* ============================================================
+   9. 四毒チェックとカスタムNGチェック
+   ============================================================ */
+function checkYondoku(ingredients) {
+  const result = { sugar: false, wheat: false, dairy: false, oil: false };
+  for (const raw of ingredients) {
+    let text = norm(raw);
+    for (const kind of Object.keys(YONDOKU)) {
+      const def = YONDOKU[kind];
+      // 除外ワード(乳化剤・ごま油など)を消してから判定する
+      let t = text;
+      for (const ex of def.exclude) t = t.split(norm(ex)).join("");
+      if (def.keywords.some(k => t.includes(norm(k)))) result[kind] = true;
+      // 原材料名が「乳」1文字だけの表示(例:パンの「乳」)も乳製品として扱う
+      if (kind === "dairy" && t === "乳") result.dairy = true;
+    }
+  }
+  return result;
+}
+
+function checkCustomNG(ingredients, productName, ngList) {
+  const hits = [];
+  const targets = ingredients.concat(productName ? [productName] : []);
+  for (const ng of ngList) {
+    const words = [ng.name].concat(ng.aliases || []);
+    const hit = targets.some(t => {
+      const tn = norm(t);
+      return words.some(w => {
+        const wn = norm(w);
+        return wn && (tn === wn || (wn.length >= 2 && tn.includes(wn)));
+      });
+    });
+    if (hit) hits.push(ng.name);
+  }
+  return hits;
+}
+
+/* ============================================================
+   10. 総合判定ロジック(◎○△×)
+   ------------------------------------------------------------
+   × : 高リスク添加物 or カスタムNG成分を含む
+   △ : 中リスク添加物 or 四毒のどれかを含む
+   ○ : 添加物はあるが全て低リスク、四毒なし
+   ◎ : 添加物なし・四毒なし・NGなし
+   ============================================================ */
+function computeVerdict(additiveItems, yondoku, ngHits, yondokuEnabled) {
+  if (ngHits.length > 0) return "×";
+  if (additiveItems.some(i => i.riskLevel === "high")) return "×";
+  const hasYondoku = yondokuEnabled && yondoku && (yondoku.sugar || yondoku.wheat || yondoku.dairy || yondoku.oil);
+  if (additiveItems.some(i => i.riskLevel === "medium") || hasYondoku) return "△";
+  if (additiveItems.length > 0) return "○";
+  return "◎";
+}
+
+// 判定理由のサマリー文(2〜3行)を組み立てる
+function buildSummary(verdict, items, yondoku, ngHits, yondokuEnabled) {
+  const lines = [];
+  if (ngHits.length > 0) {
+    lines.push("🚫 あなたが登録したNG成分「" + ngHits.join("・") + "」を含みます。");
+  }
+  const high = items.filter(i => i.riskLevel === "high").map(i => i.name);
+  const med = items.filter(i => i.riskLevel === "medium").map(i => i.name);
+  if (high.length > 0) {
+    lines.push("デンマーク/EU基準で特に問題視される成分:" + high.slice(0, 4).join("・") + (high.length > 4 ? " など" : ""));
+  }
+  if (med.length > 0 && lines.length < 2) {
+    lines.push("注意したい成分:" + med.slice(0, 4).join("・") + (med.length > 4 ? " など" : ""));
+  }
+  if (yondokuEnabled && yondoku) {
+    const y = Object.keys(YONDOKU).filter(k => yondoku[k]).map(k => YONDOKU[k].label);
+    if (y.length > 0) lines.push("四毒チェック:" + y.join("・") + " を含みます。");
+  }
+  if (lines.length === 0) {
+    if (verdict === "◎") lines.push("添加物・四毒・NG成分は見つかりませんでした。安心して選べる食品です。");
+    else if (verdict === "○") lines.push("添加物はありますが、いずれもEU/デンマークで問題視されていない低リスクのものです。");
+  }
+  return lines.join("\n");
+}
+
+/* ============================================================
+   11. 判定の実行(メインの流れ)
+   ============================================================ */
+
+// 入力方法の切り替え
+function setMode(mode) {
+  currentMode = mode;
+  ["text", "label", "package"].forEach(m => $("mode-" + m).classList.toggle("active", m === mode));
+  $("input-text-area").classList.toggle("hidden", mode !== "text");
+  $("input-photo-area").classList.toggle("hidden", mode === "text");
+  $("photo-guide").textContent = (mode === "label")
+    ? "原材料表示のラベル部分を、なるべく大きくハッキリ撮影してください。"
+    : "商品パッケージ全体を撮影してください。※正確な判定には原材料ラベルの撮影をおすすめします。";
+}
+
+// ① 商品名テキストでチェック
+async function startTextCheck() {
+  const name = $("product-name-input").value.trim();
+  if (!name) { showToast("商品名を入力してください"); return; }
+
+  // オフラインのときは、入力をそのまま原材料リストとして簡易判定する
+  if (!navigator.onLine) {
+    const ingredients = name.split(/[、,・/\n]/).map(s => s.trim()).filter(Boolean);
+    await judgeAndShow({
+      productName: name, ingredients, aiAdditives: [],
+      inputType: "text", estimated: false, offline: true
+    });
+    return;
+  }
+
+  try {
+    setLoading("原材料を推定しています…");
+    const prompt =
+      "「" + name + "」という日本で市販されている食品について、一般的な原材料構成(原材料表示に書かれる内容)を推定してください。\n" +
+      "以下の形のJSONだけを出力してください。前置き・説明・コードブロックは禁止です。\n" +
+      '{"productName":"商品名","ingredients":["原材料名を表示順に"],"additives":["ingredientsのうち食品添加物と思われるもの"]}\n' +
+      "・添加物は日本の表示名(例:調味料(アミノ酸等)、亜硝酸Na)で書いてください。\n" +
+      "・その商品を特定できない場合は、同じジャンルの典型的な市販品として推定してください。";
+    const data = await callClaudeJson([{ role: "user", content: prompt }], 2500);
+    await judgeAndShow({
+      productName: data.productName || name,
+      ingredients: data.ingredients || [],
+      aiAdditives: data.additives || [],
+      inputType: "text",
+      estimated: true
+    });
+  } catch (e) {
+    setLoading(null);
+    showError(e);
+  }
+}
+
+// ②③ 写真でチェック(原材料ラベル or パッケージ全体)
+async function startPhotoCheck(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = ""; // 同じ写真をもう一度選べるようにリセット
+  if (!file) return;
+
+  if (!navigator.onLine) {
+    showError(new Error("オフラインのためAI判定は使えません。テキスト入力ならDB照合のみで簡易判定できます"));
+    return;
+  }
+
+  try {
+    setLoading("写真を圧縮しています…");
+    const base64 = await compressImage(file);
+
+    setLoading("原材料を読み取っています…");
+    const isLabel = currentMode === "label";
+    const prompt =
+      (isLabel
+        ? "この画像は食品の原材料表示ラベルです。ラベルに書かれている内容を読み取ってください。\n"
+        : "この画像は食品のパッケージです。商品名と、見える範囲の原材料・成分情報を読み取ってください。\n") +
+      "以下の形のJSONだけを出力してください。前置き・説明・コードブロックは禁止です。\n" +
+      '{"productName":"商品名(わかれば)","labelFound":true,"ingredients":["原材料名を表示順に"],"additives":["ingredientsのうち食品添加物と思われるもの"]}\n' +
+      "・原材料表示が読み取れない場合は labelFound を false にして ingredients は空配列にしてください。\n" +
+      "・「/」以降が添加物である日本の表示ルールを考慮してください。";
+    const data = await callClaudeJson([{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+        { type: "text", text: prompt }
+      ]
+    }], 3000);
+
+    if (data.labelFound === false || !(data.ingredients || []).length) {
+      setLoading(null);
+      showError(new Error("原材料表示を読み取れませんでした。ラベル部分を大きく・明るく撮影してもう一度お試しください"));
+      return;
+    }
+
+    await judgeAndShow({
+      productName: data.productName || "(商品名不明)",
+      ingredients: data.ingredients || [],
+      aiAdditives: data.additives || [],
+      inputType: currentMode,
+      estimated: false
+    });
+  } catch (e) {
+    setLoading(null);
+    showError(e);
+  }
+}
+
+/* 共通の判定処理:
+   マスタ照合 → 不明な添加物だけAIに補完判定 → 四毒 → NG → 総合判定 → 表示・履歴保存 */
+async function judgeAndShow(input) {
+  try {
+    setLoading("添加物データベースと照合しています…");
+
+    const ingredients = input.ingredients.map(s => String(s).trim()).filter(Boolean);
+    const aiAdditiveSet = new Set((input.aiAdditives || []).map(norm));
+
+    const items = [];        // 判定対象の添加物リスト
+    const unknown = [];      // マスタにない添加物(AIに聞く)
+    const seenIds = new Set();
+
+    for (const ing of ingredients) {
+      const hit = findAdditive(ing);
+      if (hit) {
+        if (!seenIds.has(hit.id)) {
+          seenIds.add(hit.id);
+          items.push({
+            name: hit.name, eNumber: hit.eNumber, category: hit.category,
+            riskLevel: hit.riskLevel, denmarkStatus: hit.denmarkStatus,
+            concern: hit.concern, source: "db", matched: ing
+          });
+        }
+      } else if (aiAdditiveSet.has(norm(ing))) {
+        unknown.push(ing); // AIが「添加物」と判断したがマスタにないもの
+      }
+    }
+
+    // マスタにない添加物をAIに補完判定してもらう(オフライン簡易判定では省略)
+    if (unknown.length > 0 && !input.offline) {
+      setLoading("不明な添加物をAIが判定しています…");
+      try {
+        const prompt =
+          "以下の食品成分(食品添加物の可能性があるもの)を、EU/デンマークの規制状況と健康懸念の観点で判定してください。\n" +
+          "以下の形のJSON配列だけを出力してください。前置き・コードブロック禁止。\n" +
+          '[{"name":"入力された名前","isAdditive":true,"riskLevel":"high|medium|low","denmarkStatus":"banned|restricted|warning|approved","concern":"40字以内の説明"}]\n' +
+          "・判断に迷う場合は riskLevel を厳しめ(medium側)にしてください。\n" +
+          "・添加物ではなく普通の食品(肉・野菜など)なら isAdditive を false にしてください。\n" +
+          "対象:" + unknown.join("、");
+        const judged = await callClaudeJson([{ role: "user", content: prompt }], 2500);
+        for (const j of (Array.isArray(judged) ? judged : [])) {
+          if (j && j.isAdditive !== false && j.name) {
+            items.push({
+              name: j.name, eNumber: null, category: "AI判定",
+              riskLevel: ["high", "medium", "low"].includes(j.riskLevel) ? j.riskLevel : "medium",
+              denmarkStatus: ["banned", "restricted", "warning", "approved"].includes(j.denmarkStatus) ? j.denmarkStatus : "restricted",
+              concern: j.concern || "詳細情報なし(AIによる判定)", source: "ai", matched: j.name
+            });
+          }
+        }
+      } catch (e) {
+        // AI補完に失敗しても、マスタ照合分だけで判定を続ける
+        console.warn("AI補完判定に失敗:", e);
+        for (const u of unknown) {
+          items.push({
+            name: u, eNumber: null, category: "不明",
+            riskLevel: "medium", denmarkStatus: "restricted",
+            concern: "情報を取得できなかったため、念のため注意扱いにしています", source: "ai", matched: u
+          });
+        }
+      }
+    }
+
+    setLoading("総合判定を計算しています…");
+
+    const yondokuEnabled = isYondokuOn();
+    const yondoku = yondokuEnabled ? checkYondoku(ingredients) : null;
+    const ngList = await store.list("customNG");
+    const ngHits = checkCustomNG(ingredients, input.productName, ngList);
+    const verdict = computeVerdict(items, yondoku, ngHits, yondokuEnabled);
+    const summary = buildSummary(verdict, items, yondoku, ngHits, yondokuEnabled);
+
+    const result = {
+      name: input.productName,
+      verdict,
+      date: new Date().toISOString(),
+      inputType: input.inputType,
+      estimated: !!input.estimated,
+      offline: !!input.offline,
+      summary,
+      details: items,
+      ingredients,
+      yondoku,
+      ngHits
+    };
+    lastResult = result;
+
+    // 履歴に自動保存(写真そのものは保存しない)
+    await saveHistory(result);
+
+    setLoading(null);
+    renderResult(result, $("result-area"), true);
+    $("result-area").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    setLoading(null);
+    showError(e);
+  }
+}
+
+function showError(e) {
+  const area = $("result-area");
+  let html = '<div class="card"><div class="alert-box">⚠️ ' + escapeHtml(e.message || "エラーが発生しました") + "</div>";
+  if (e.needKey) {
+    html += '<button class="btn-main" onclick="switchTab(\'settings\')">⚙️ 設定タブを開く</button>';
+  }
+  html += "</div>";
+  area.innerHTML = html;
+}
+
+/* ============================================================
+   12. 判定結果の表示
+   ============================================================ */
+function renderResult(r, containerEl, showSaveButton) {
+  const v = VERDICTS[r.verdict] || VERDICTS["△"];
+  let html = '<div class="card">';
+
+  // 大きな判定マーク
+  html += '<div class="verdict-circle" style="background:' + v.color + '">' + r.verdict + "</div>";
+  html += '<div class="verdict-label" style="color:' + v.color + '">' + escapeHtml(v.label) + "</div>";
+  html += '<div style="text-align:center;font-weight:700;margin-bottom:8px">' + escapeHtml(r.name || "") + "</div>";
+
+  // 推定・オフライン・パッケージ撮影の注意書き
+  if (r.estimated) {
+    html += '<div class="info-box">💡 これは商品名からAIが<b>推定した</b>原材料での判定です。実際の商品と異なる場合があります。正確に知りたいときは原材料ラベルを撮影してください。</div>';
+  }
+  if (r.inputType === "package") {
+    html += '<div class="info-box">📦 パッケージ全体からの判定です。正確な判定には<b>原材料ラベルの撮影</b>をおすすめします。</div>';
+  }
+  if (r.offline) {
+    html += '<div class="info-box">📴 オフライン簡易判定です(登録データベースとの照合のみ。AIによる補完はしていません)。</div>';
+  }
+
+  // 判定理由サマリー
+  if (r.summary) {
+    html += '<div class="verdict-summary">' + escapeHtml(r.summary).replace(/\n/g, "<br>") + "</div>";
+  }
+
+  // 成分ごとの内訳
+  if (r.details && r.details.length > 0) {
+    html += '<h2 style="margin-top:16px">🧪 検出された添加物(' + r.details.length + "件)</h2>";
+    r.details.forEach((d, i) => {
+      const badge = '<span class="badge ' + d.riskLevel + '">' + (RISK_LABELS[d.riskLevel] || "?") + "</span>";
+      const src = '<span class="src-label">' + (d.source === "db" ? "マスタDB" : "AI判定") + "</span>";
+      const en = d.eNumber ? "(" + escapeHtml(d.eNumber) + ")" : "";
+      html += '<div class="ing-item">' +
+        '<div class="ing-head" onclick="this.nextElementSibling.classList.toggle(\'hidden\')">' +
+          '<span class="ing-name">' + escapeHtml(d.name) + en + src + "</span>" + badge +
+        "</div>" +
+        '<div class="ing-detail hidden">' +
+          "<div><b>" + escapeHtml(DK_LABELS[d.denmarkStatus] || "扱い不明") + "</b></div>" +
+          "<div>" + escapeHtml(d.concern || "") + "</div>" +
+          (d.category ? '<div class="note">分類:' + escapeHtml(d.category) + "</div>" : "") +
+        "</div>" +
+      "</div>";
+    });
+  } else {
+    html += '<p class="note" style="margin-top:12px">検出された添加物はありません。</p>';
+  }
+
+  // 四毒チェック結果(別枠で4項目)
+  if (r.yondoku) {
+    html += '<h2 style="margin-top:16px">☠️ 四毒チェック</h2><div class="yondoku-grid">';
+    for (const kind of Object.keys(YONDOKU)) {
+      const def = YONDOKU[kind];
+      const hit = r.yondoku[kind];
+      html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
+    }
+    html += "</div>";
+  }
+
+  // カスタムNG
+  if (r.ngHits && r.ngHits.length > 0) {
+    html += '<div class="alert-box" style="margin-top:12px">🚫 NG成分:' + escapeHtml(r.ngHits.join("・")) + "</div>";
+  }
+
+  // 原材料一覧(折りたたみ)
+  if (r.ingredients && r.ingredients.length > 0) {
+    html += '<div class="ing-item"><div class="ing-head" onclick="this.nextElementSibling.classList.toggle(\'hidden\')">' +
+      '<span class="ing-name">📄 読み取った原材料(' + r.ingredients.length + "件)をみる</span><span>▾</span></div>" +
+      '<div class="ing-detail hidden">' + escapeHtml(r.ingredients.join("、")) + "</div></div>";
+  }
+
+  if (showSaveButton) {
+    html += '<div style="margin-top:14px"><button class="btn-main" onclick="saveFavoriteFromLast()">⭐ お気に入り(OK食品)に保存</button></div>';
+    html += '<p class="note" style="text-align:center">📋 履歴には自動保存済みです</p>';
+  }
+
+  html += '<div class="disclaimer">本判定は参考情報です。最終的な判断はご自身で行ってください。</div>';
+  html += "</div>";
+  containerEl.innerHTML = html;
+}
+
+/* ============================================================
+   13. 履歴
+   ============================================================ */
+async function saveHistory(result) {
+  try {
+    const item = Object.assign({}, result);
+    await store.add("history", item);
+    // 200件を超えたら古い順に自動削除
+    const all = await store.list("history");
+    if (all.length > 200) {
+      all.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+      const extra = all.slice(0, all.length - 200);
+      for (const e of extra) await store.remove("history", e.key);
+    }
+  } catch (e) {
+    console.warn("履歴の保存に失敗:", e);
+  }
+}
+
+async function renderHistory() {
+  const el = $("history-list");
+  const all = await store.list("history");
+  if (all.length === 0) {
+    el.innerHTML = '<p class="note">まだ履歴がありません。</p>';
+    return;
+  }
+  all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ" };
+  el.innerHTML = all.map(item => {
+    const v = VERDICTS[item.verdict] || VERDICTS["△"];
+    const d = item.date ? new Date(item.date) : null;
+    const dateStr = d ? (d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
+    return '<div class="list-item">' +
+      '<div class="list-head" onclick="toggleDetail(this)">' +
+        '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
+        '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div>" +
+        '<div class="list-date">' + dateStr + " ・ " + (typeLabel[item.inputType] || "") + "</div></div><span>▾</span>" +
+      "</div>" +
+      '<div class="hidden">' +
+        '<div class="list-actions">' +
+          '<button class="btn-sub btn-small" onclick=\'showStoredResult(' + JSON.stringify(item.key) + ', "history")\'>詳細をみる</button>' +
+          '<button class="btn-sub btn-small" onclick=\'addFavoriteFromHistory(' + JSON.stringify(item.key) + ')\'>⭐ お気に入りへ</button>' +
+          '<button class="btn-danger btn-small" onclick=\'deleteItem("history", ' + JSON.stringify(item.key) + ')\'>削除</button>' +
+        "</div>" +
+      "</div>" +
+    "</div>";
+  }).join("");
+}
+
+function toggleDetail(headEl) {
+  headEl.nextElementSibling.classList.toggle("hidden");
+}
+
+// 履歴/お気に入りの項目を「チェック」画面に表示し直す
+async function showStoredResult(key, listName) {
+  const all = await store.list(listName);
+  const item = all.find(x => x.key === key);
+  if (!item) { showToast("データが見つかりません"); return; }
+  switchTab("check");
+  renderResult(item, $("result-area"), false);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function deleteItem(listName, key) {
+  if (!confirm("この項目を削除しますか?")) return;
+  await store.remove(listName, key);
+  showToast("削除しました");
+  if (listName === "history") renderHistory(); else renderFavorites();
+}
+
+/* ============================================================
+   14. お気に入り(OK食品リスト)
+   ============================================================ */
+async function saveFavoriteFromLast() {
+  if (!lastResult) { showToast("先に判定を実行してください"); return; }
+  const copy = Object.assign({}, lastResult);
+  delete copy.key;
+  await store.add("favorites", copy);
+  showToast("⭐ お気に入りに保存しました");
+}
+
+async function addFavoriteFromHistory(key) {
+  const all = await store.list("history");
+  const item = all.find(x => x.key === key);
+  if (!item) { showToast("データが見つかりません"); return; }
+  const copy = Object.assign({}, item);
+  delete copy.key;
+  await store.add("favorites", copy);
+  showToast("⭐ お気に入りに追加しました");
+}
+
+async function renderFavorites() {
+  const el = $("favorites-list");
+  const q = norm($("fav-search").value);
+  let all = await store.list("favorites");
+  all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (q) all = all.filter(x => norm(x.name).includes(q));
+  if (all.length === 0) {
+    el.innerHTML = '<p class="note">' + (q ? "検索に一致するお気に入りがありません。" : "まだお気に入りがありません。◎や○の食品を保存しておきましょう。") + "</p>";
+    return;
+  }
+  el.innerHTML = all.map(item => {
+    const v = VERDICTS[item.verdict] || VERDICTS["△"];
+    return '<div class="list-item">' +
+      '<div class="list-head" onclick="toggleDetail(this)">' +
+        '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
+        '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div></div><span>▾</span>" +
+      "</div>" +
+      '<div class="hidden">' +
+        '<div class="list-actions">' +
+          '<button class="btn-sub btn-small" onclick=\'showStoredResult(' + JSON.stringify(item.key) + ', "favorites")\'>詳細をみる</button>' +
+          '<button class="btn-danger btn-small" onclick=\'deleteItem("favorites", ' + JSON.stringify(item.key) + ')\'>削除</button>' +
+        "</div>" +
+      "</div>" +
+    "</div>";
+  }).join("");
+}
+
+/* ============================================================
+   15. カスタムNG成分の管理
+   ============================================================ */
+async function renderNGList() {
+  const el = $("ng-list");
+  const all = await store.list("customNG");
+  if (all.length === 0) {
+    el.innerHTML = '<p class="note">登録なし</p>';
+    return;
+  }
+  el.innerHTML = all.map(ng =>
+    '<div class="ng-item"><div><b>' + escapeHtml(ng.name) + "</b>" +
+    ((ng.aliases && ng.aliases.length) ? '<div class="note">別名:' + escapeHtml(ng.aliases.join(", ")) + "</div>" : "") +
+    "</div><button class=\"btn-danger btn-small\" onclick='deleteNG(" + JSON.stringify(ng.key) + ")'>削除</button></div>"
+  ).join("");
+}
+
+async function addCustomNG() {
+  const name = $("ng-name-input").value.trim();
+  if (!name) { showToast("成分名を入力してください"); return; }
+  const aliases = $("ng-alias-input").value.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+  await store.add("customNG", { name, aliases, createdAt: new Date().toISOString() });
+  $("ng-name-input").value = "";
+  $("ng-alias-input").value = "";
+  showToast("NG成分を追加しました");
+  renderNGList();
+}
+
+async function deleteNG(key) {
+  if (!confirm("このNG成分を削除しますか?")) return;
+  await store.remove("customNG", key);
+  showToast("削除しました");
+  renderNGList();
+}
+
+/* ============================================================
+   16. バックアップ / 復元
+   ============================================================ */
+async function exportBackup(silent) {
+  const backup = {
+    app: "mogumori",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      history: await store.list("history"),
+      favorites: await store.list("favorites"),
+      customNG: await store.list("customNG")
+    }
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = "mogumori_backup_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  if (!silent) showToast("バックアップを書き出しました");
+}
+
+async function importBackup(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    // 旧名(たべまもり)時代のバックアップファイルも読み込めるようにする
+    if ((backup.app !== "mogumori" && backup.app !== "tabemamori") || !backup.data) {
+      showToast("モグもりのバックアップファイルではありません");
+      return;
+    }
+    const h = (backup.data.history || []).length;
+    const f = (backup.data.favorites || []).length;
+    const n = (backup.data.customNG || []).length;
+    if (!confirm("バックアップを復元しますか?\n(履歴" + h + "件・お気に入り" + f + "件・NG成分" + n + "件)\n\n今のデータは上書きされます。念のため、復元前に現在のデータのバックアップを自動で書き出します。")) return;
+
+    // 安全のため、上書き前に現在のデータを自動バックアップ
+    await exportBackup(true);
+
+    setLoading("復元しています…");
+    await store.replaceAll("history", backup.data.history || []);
+    await store.replaceAll("favorites", backup.data.favorites || []);
+    await store.replaceAll("customNG", backup.data.customNG || []);
+    setLoading(null);
+    showToast("✅ 復元が完了しました");
+    renderNGList();
+  } catch (e) {
+    setLoading(null);
+    showToast("復元に失敗しました:" + (e.message || ""));
+  }
+}
+
+/* ============================================================
+   17. 画面切り替え(下部タブ)
+   ============================================================ */
+function switchTab(name) {
+  ["check", "history", "favorites", "settings"].forEach(t => {
+    $("view-" + t).classList.toggle("hidden", t !== name);
+    $("tab-" + t).classList.toggle("active", t === name);
+  });
+  if (name === "history") renderHistory();
+  if (name === "favorites") renderFavorites();
+  if (name === "settings") renderNGList();
+  window.scrollTo(0, 0);
+}
+
+/* ============================================================
+   18. 起動処理
+   ============================================================ */
+function updateOnlineStatus() {
+  $("offline-notice").classList.toggle("hidden", navigator.onLine);
+}
+window.addEventListener("online", updateOnlineStatus);
+window.addEventListener("offline", updateOnlineStatus);
+
+window.addEventListener("load", async () => {
+  // 設定値を画面に反映
+  $("api-key-input").value = getApiKey();
+  $("model-select").value = getModel();
+  $("yondoku-toggle").checked = isYondokuOn();
+  $("storage-mode-note").textContent = useFirebase
+    ? "保存先:Firebase(クラウド)"
+    : "保存先:この端末の中(Firebase未設定のため。設定方法はREADME参照)";
+
+  updateOnlineStatus();
+  await loadMaster();
+
+  // ホーム画面用アプリとして動くための登録(Service Worker)
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW登録失敗", e));
+  }
+});
+</script>
+</body>
+</html>

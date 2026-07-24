@@ -1,0 +1,26 @@
+{
+  "name": "モグもり 食品安全チェッカー",
+  "short_name": "モグもり",
+  "description": "食品添加物をデンマーク/EU基準と四毒の観点でチェックするアプリ",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAFAF5",
+  "theme_color": "#4A7C59",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
