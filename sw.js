@@ -1,13 +1,19 @@
 /* ============================================================
    モグもり Service Worker
    ------------------------------------------------------------
-   アプリの基本ファイルだけを端末に保存(キャッシュ)して、
-   2回目以降の起動を速く・オフラインでも開けるようにします。
+   アプリの基本ファイルを端末に保存(キャッシュ)して、
+   オフラインでも開けるようにします。
    AI判定(api.anthropic.com)とFirebaseの通信はキャッシュしません。
+
+   【保存の方針】ネット優先(network-first)
+     ・通信できるとき  → 必ず最新を表示し、保存も新しく更新する
+     ・通信できないとき → 保存済みのファイルで開く
+   これにより「更新したのに古い画面のまま」が起きにくくなります。
+
    ※アプリを更新したときは、下の CACHE_VERSION の数字を1つ
      上げると、全員のスマホに新しいファイルが行き渡ります。
    ============================================================ */
-const CACHE_VERSION = "mogumori-v2";
+const CACHE_VERSION = "mogumori-v3";
 
 // キャッシュするのはアプリの基本ファイルだけ(判定APIはキャッシュしない)
 const APP_FILES = [
@@ -17,7 +23,12 @@ const APP_FILES = [
   "./manifest.json"
 ];
 
-// インストール時:基本ファイルを保存する
+// 画面側から「すぐ新しい版に切り替えて」と言われたら従う
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+});
+
+// インストール時:基本ファイルを保存し、すぐ新しい版に切り替える
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
@@ -26,7 +37,7 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// 有効化時:古いバージョンのキャッシュを掃除する
+// 有効化時:古いバージョンのキャッシュを掃除し、開いている画面をこの版に引き継ぐ
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
@@ -37,7 +48,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// 通信のたびに呼ばれる:基本ファイルはキャッシュ優先、それ以外は普通に通信
+// 通信のたびに呼ばれる
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
@@ -47,23 +58,25 @@ self.addEventListener("fetch", (event) => {
   // GET以外(データ送信など)にも関与しない
   if (event.request.method !== "GET") return;
 
+  // ネット優先:まず最新を取りに行き、成功したら保存も更新する。
+  // 通信できないときだけ、保存済みのファイルで開く。
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
-      // 画面を開く通信(ページ表示)は、オフラインなら保存済みのindex.htmlで開く
-      if (!cached && event.request.mode === "navigate") {
-        return fetch(event.request).catch(() => caches.match("./index.html"));
-      }
-      // ネットにつながるなら最新を取りに行き、キャッシュも更新する
-      const fetched = fetch(event.request)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached); // オフラインならキャッシュを返す
-      return cached || fetched;
-    })
+    fetch(event.request)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(event.request, { ignoreSearch: true })
+          .then((cached) => {
+            if (cached) return cached;
+            // ページ表示の通信で保存が無ければ、保存済みのindex.htmlで開く
+            if (event.request.mode === "navigate") return caches.match("./index.html");
+            return Response.error();
+          })
+      )
   );
 });

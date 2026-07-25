@@ -1894,7 +1894,30 @@ window.addEventListener("load", async () => {
 
   // ホーム画面用アプリとして動くための登録(Service Worker)
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW登録失敗", e));
+    // 新しい版に切り替わったら、画面を1回だけ自動で読み込み直す
+    // (更新のたびに手で開き直さなくても、最新画面に切り替わるようにする)
+    let reloadedOnce = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadedOnce) return;
+      reloadedOnce = true;
+      window.location.reload();
+    });
+
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      // 起動のたびに更新がないか確認する
+      reg.update().catch(() => {});
+      // 新しい版が用意できたら、すぐ有効化するよう促す
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) {
+            // 新版インストール済み&既に動作中の版がある=更新あり
+            if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+    }).catch(e => console.warn("SW登録失敗", e));
   }
 });
 </script>
