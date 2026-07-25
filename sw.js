@@ -7,7 +7,7 @@
    ※アプリを更新したときは、下の CACHE_VERSION の数字を1つ
      上げると、全員のスマホに新しいファイルが行き渡ります。
    ============================================================ */
-const CACHE_VERSION = "mogumori-v1";
+const CACHE_VERSION = "mogumori-v2";
 
 // キャッシュするのはアプリの基本ファイルだけ(判定APIはキャッシュしない)
 const APP_FILES = [

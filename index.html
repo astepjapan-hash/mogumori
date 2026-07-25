@@ -223,6 +223,39 @@ nav button.active { color: var(--main); }
 .toast.show { opacity: 0.95; }
 .alert-box { background: #FBEAEA; color: var(--v-bad); border-radius: 12px; padding: 12px; font-size: 0.9rem; margin-bottom: 12px; }
 .info-box { background: #FFF7E6; color: #8a6d1a; border-radius: 12px; padding: 12px; font-size: 0.88rem; margin-bottom: 12px; }
+
+/* 詳細調査の表(健康への影響・デンマーク基準) */
+.dtable { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: #fff; }
+.dtable th, .dtable td { border: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: top; }
+.dtable th { background: #F0F5EE; color: var(--main); white-space: nowrap; }
+.src-list a { color: var(--main); word-break: break-all; }
+
+/* 比較機能 */
+.chkbox { width: 22px; height: 22px; min-height: 22px; flex-shrink: 0; accent-color: var(--main); }
+#compare-bar {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  background: var(--main); color: #fff;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  z-index: 95;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+}
+#compare-overlay {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  z-index: 180;
+  overflow-y: auto;
+  padding: 16px 14px calc(30px + env(safe-area-inset-bottom));
+}
+#compare-overlay .inner { max-width: 720px; margin: 0 auto; }
+.cmp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
+table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
+.cmp th, .cmp td { border: 1px solid var(--line); padding: 8px 10px; text-align: center; min-width: 96px; }
+.cmp th.rowh {
+  background: #F0F5EE; color: var(--main); text-align: left; min-width: 110px;
+  position: sticky; left: 0; z-index: 1;
+}
 </style>
 </head>
 <body>
@@ -272,7 +305,10 @@ nav button.active { color: var(--main); }
        画面2:履歴
        ============================================================ -->
   <section id="view-history" class="hidden">
-    <h2>📋 チェック履歴(最新200件)</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2>📋 チェック履歴(最新200件)</h2>
+      <button class="btn-sub btn-small" onclick="toggleCompareMode()">⚖️ 比較</button>
+    </div>
     <div class="card" id="history-list"><p class="note">まだ履歴がありません。</p></div>
   </section>
 
@@ -280,7 +316,10 @@ nav button.active { color: var(--main); }
        画面3:お気に入り(OK食品リスト)
        ============================================================ -->
   <section id="view-favorites" class="hidden">
-    <h2>⭐ お気に入り(OK食品リスト)</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2>⭐ お気に入り(OK食品リスト)</h2>
+      <button class="btn-sub btn-small" onclick="toggleCompareMode()">⚖️ 比較</button>
+    </div>
     <div class="card">
       <input type="text" id="fav-search" placeholder="🔍 名前で検索" oninput="renderFavorites()">
     </div>
@@ -342,6 +381,25 @@ nav button.active { color: var(--main); }
     <p class="disclaimer">モグもり v1.0<br>本判定は参考情報です。最終的な判断はご自身で行ってください。</p>
   </section>
 </main>
+
+<!-- 比較モードの操作バー(履歴・お気に入りで表示) -->
+<div id="compare-bar" class="hidden">
+  <span style="font-weight:700">⚖️ 選択中 <span id="compare-count">0</span>件</span>
+  <button class="btn-sub btn-small" style="margin-left:auto" onclick="runCompare()">比較する</button>
+  <button class="btn-small" style="background:rgba(255,255,255,0.25);color:#fff" onclick="toggleCompareMode()">やめる</button>
+</div>
+
+<!-- 比較結果の画面(全画面) -->
+<div id="compare-overlay" class="hidden">
+  <div class="inner">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">⚖️ 商品くらべ</h2>
+      <button class="btn-sub btn-small" onclick="closeCompare()">✕ 閉じる</button>
+    </div>
+    <button class="btn-main" style="margin-bottom:12px" onclick="rankCompare()">🏆 このカテゴリでのおすすめ順に並び替え</button>
+    <div id="compare-content"></div>
+  </div>
+</div>
 
 <!-- 下部タブ(4つ) -->
 <nav>
@@ -632,8 +690,8 @@ function apiHeaders(key) {
   };
 }
 
-// AIを呼び出して返答テキストを受け取る(エラーは日本語メッセージにして投げる)
-async function callClaude(messages, maxTokens) {
+// AIを呼び出して応答データ(オブジェクト)を受け取る共通処理(エラーは日本語メッセージにして投げる)
+async function claudeRequest(body) {
   const key = getApiKey();
   if (!key) {
     const err = new Error("設定タブでAPIキーを登録してください");
@@ -648,7 +706,7 @@ async function callClaude(messages, maxTokens) {
     res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: apiHeaders(key),
-      body: JSON.stringify({ model: getModel(), max_tokens: maxTokens || 3000, messages })
+      body: JSON.stringify(body)
     });
   } catch (e) {
     throw new Error("通信エラーです。電波状況を確認して再試行してください");
@@ -660,8 +718,18 @@ async function callClaude(messages, maxTokens) {
     try { detail = (await res.json()).error.message || ""; } catch (e) {}
     throw new Error("AI判定でエラーが発生しました(" + res.status + ")" + (detail ? ":" + detail : ""));
   }
-  const data = await res.json();
+  return await res.json();
+}
+
+// 応答データから本文テキストだけを取り出す
+function textOfResponse(data) {
   return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+// テキストの返答だけ欲しいときの呼び出し(通常判定用)
+async function callClaude(messages, maxTokens) {
+  const data = await claudeRequest({ model: getModel(), max_tokens: maxTokens || 3000, messages });
+  return textOfResponse(data);
 }
 
 // AIの返答からJSONを取り出す(```json などの飾りが付いていても対応)
@@ -1058,6 +1126,7 @@ function showError(e) {
    12. 判定結果の表示
    ============================================================ */
 function renderResult(r, containerEl, showSaveButton) {
+  window.__shownResult = r; // 「詳細調査」「お気に入り保存」ボタンが参照する
   const v = VERDICTS[r.verdict] || VERDICTS["△"];
   let html = '<div class="card">';
 
@@ -1132,6 +1201,12 @@ function renderResult(r, containerEl, showSaveButton) {
     html += '<p class="note" style="text-align:center">📋 履歴には自動保存済みです</p>';
   }
 
+  // 詳細調査ボタン(Web検索で公式情報を確認する上位モード)
+  if (r.name && !r.offline) {
+    html += '<div style="margin-top:10px"><button class="btn-sub" style="width:100%" onclick="startDetailFromShown()">🔎 詳細調査(Web検索で公式情報を確認)</button></div>';
+    html += '<p class="note" style="text-align:center">通常判定=高速・低コスト/詳細調査=検索あり・時間と費用がかかります</p>';
+  }
+
   html += '<div class="disclaimer">本判定は参考情報です。最終的な判断はご自身で行ってください。</div>';
   html += "</div>";
   containerEl.innerHTML = html;
@@ -1164,13 +1239,14 @@ async function renderHistory() {
     return;
   }
   all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ" };
+  const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ", detail: "🔎 詳細調査" };
   el.innerHTML = all.map(item => {
     const v = VERDICTS[item.verdict] || VERDICTS["△"];
     const d = item.date ? new Date(item.date) : null;
     const dateStr = d ? (d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
     return '<div class="list-item">' +
       '<div class="list-head" onclick="toggleDetail(this)">' +
+        (compareMode ? '<input type="checkbox" class="chkbox"' + (compareSel["history|" + item.key] ? " checked" : "") + " onclick='event.stopPropagation(); toggleCompareSel(\"history\", " + JSON.stringify(item.key) + ", this)'>" : "") +
         '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
         '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div>" +
         '<div class="list-date">' + dateStr + " ・ " + (typeLabel[item.inputType] || "") + "</div></div><span>▾</span>" +
@@ -1196,7 +1272,11 @@ async function showStoredResult(key, listName) {
   const item = all.find(x => x.key === key);
   if (!item) { showToast("データが見つかりません"); return; }
   switchTab("check");
-  renderResult(item, $("result-area"), false);
+  if (item.detailData) {
+    renderDetailResult(item, $("result-area")); // 詳細調査の結果はブロック形式で表示
+  } else {
+    renderResult(item, $("result-area"), false);
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1242,6 +1322,7 @@ async function renderFavorites() {
     const v = VERDICTS[item.verdict] || VERDICTS["△"];
     return '<div class="list-item">' +
       '<div class="list-head" onclick="toggleDetail(this)">' +
+        (compareMode ? '<input type="checkbox" class="chkbox"' + (compareSel["favorites|" + item.key] ? " checked" : "") + " onclick='event.stopPropagation(); toggleCompareSel(\"favorites\", " + JSON.stringify(item.key) + ", this)'>" : "") +
         '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
         '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div></div><span>▾</span>" +
       "</div>" +
@@ -1348,9 +1429,437 @@ async function importBackup(inputEl) {
 }
 
 /* ============================================================
+   16-2. 詳細調査モード(Web検索で公式情報を確認して再判定)
+   ------------------------------------------------------------
+   通常判定 = マスタDB照合+AIの一般知識(高速・低コスト)
+   詳細調査 = AIがWeb検索でメーカー公式・通販の情報を確認
+              してから判定(時間と費用がかかる)
+   ============================================================ */
+
+// 詳細調査でAIに出力してもらうJSONの形(プロンプトで使い回す)
+const DETAIL_SCHEMA =
+  '{\n' +
+  ' "productName":"正式な商品名",\n' +
+  ' "confirmed":true,\n' +
+  ' "ingredients":["確認できた原材料を表示順に"],\n' +
+  ' "additives":["ingredientsのうち食品添加物"],\n' +
+  ' "healthEffects":[{"item":"評価項目(例:発がん性の懸念、腸内環境への影響、子どもへの影響)","rating":"良い|注意|悪い","note":"40字以内の説明"}],\n' +
+  ' "denmarkCompliance":[{"item":"成分名または観点","status":"ok|caution|ng","note":"40字以内の説明"}],\n' +
+  ' "denmarkOverall":true,\n' +
+  ' "comment":"総合評価コメント(3〜5行、ですます調)",\n' +
+  ' "sources":[{"title":"ページ名","url":"URL"}]\n' +
+  '}';
+
+/* Web検索つきでAIを呼ぶ。
+   検索に時間がかかって途中停止(pause_turn)した場合は続きを再開する */
+async function callClaudeWithSearch(userPrompt, maxTokens) {
+  const first = { role: "user", content: userPrompt };
+  let messages = [first];
+  let data = null;
+  for (let i = 0; i < 4; i++) {
+    data = await claudeRequest({
+      model: getModel(),
+      max_tokens: maxTokens || 5000,
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+      messages
+    });
+    if (data.stop_reason !== "pause_turn") break;
+    setLoading("検索結果をまとめています…");
+    messages = [first, { role: "assistant", content: data.content }];
+  }
+  return data;
+}
+
+// 応答の中から、AIが実際に引用したページ(出典)を集める
+function collectCitations(data) {
+  const out = [];
+  for (const b of (data.content || [])) {
+    if (b.type === "text" && Array.isArray(b.citations)) {
+      for (const c of b.citations) {
+        if (c && c.url) out.push({ title: c.title || c.url, url: c.url });
+      }
+    }
+  }
+  return out;
+}
+
+// 結果画面の「詳細調査」ボタンから呼ばれる
+function startDetailFromShown() {
+  const r = window.__shownResult;
+  if (!r || !r.name) { showToast("先に通常の判定を行ってください"); return; }
+  startDetailCheck(r.name);
+}
+
+// 詳細調査の本体
+async function startDetailCheck(productName) {
+  // 費用がかかるため、実行前に必ず確認する
+  if (!confirm("検索を含む詳細調査を行います(通常より時間と費用がかかります)。実行しますか?")) return;
+
+  try {
+    setLoading("🔎 Webで公式情報を検索しています…(30秒〜1分ほどかかります)");
+    const prompt =
+      "あなたは食品安全の調査員です。「" + productName + "」という日本の市販食品について、Web検索で実際の原材料・添加物を調べてください。\n" +
+      "・まず「" + productName + " 原材料 添加物 成分」で検索してください。\n" +
+      "・情報源はメーカー公式サイトを最優先、なければ大手通販サイト(Amazon・楽天・ヨドバシ等)の商品ページを使ってください。\n" +
+      "・確認できた事実に基づいて、健康への影響と、デンマーク/EUの食品添加物基準(EC No 1333/2008等)への適合性を評価してください。\n" +
+      "・判断に迷う場合は厳しめ(注意側)に評価してください。\n" +
+      "調査が終わったら、次の形のJSONだけを出力してください。前置き・説明・コードブロックは禁止です。\n" +
+      DETAIL_SCHEMA + "\n" +
+      "・公式の原材料情報が確認できなかった場合は confirmed を false にし、一般知識で補って comment にその旨を明記してください。\n" +
+      "・sources には実際に参照したページを載せてください。";
+
+    const data = await callClaudeWithSearch(prompt, 5000);
+    const text = textOfResponse(data);
+
+    // JSONとして読み取る(失敗したら検索なしの再整形を1回だけ試す)
+    let json;
+    try {
+      json = parseJsonLoose(text);
+    } catch (e) {
+      setLoading("調査結果を整理しています…");
+      json = await callClaudeJson([{
+        role: "user",
+        content: "次の調査メモから、下記のJSON形式のデータだけを抽出して出力してください。前置き・コードブロック禁止。\n" +
+          DETAIL_SCHEMA + "\n---調査メモ---\n" + text.slice(0, 6000)
+      }], 3000);
+    }
+
+    // 出典リンクをまとめる(AI申告分+実際の引用分を合体して重複を除く)
+    let sources = [];
+    (Array.isArray(json.sources) ? json.sources : []).forEach(s => {
+      if (s && typeof s.url === "string" && /^https?:\/\//.test(s.url)) {
+        sources.push({ title: String(s.title || s.url), url: s.url });
+      }
+    });
+    collectCitations(data).forEach(s => {
+      if (/^https?:\/\//.test(s.url)) sources.push({ title: String(s.title), url: s.url });
+    });
+    const seenUrl = new Set();
+    sources = sources.filter(s => !seenUrl.has(s.url) && seenUrl.add(s.url)).slice(0, 8);
+
+    setLoading("公式情報で再判定しています…");
+
+    // 表データを安全な形にそろえる
+    const healthEffects = (Array.isArray(json.healthEffects) ? json.healthEffects : [])
+      .map(x => ({ item: String((x && x.item) || ""), rating: String((x && x.rating) || ""), note: String((x && x.note) || "") }))
+      .filter(x => x.item);
+    const dkRows = (Array.isArray(json.denmarkCompliance) ? json.denmarkCompliance : [])
+      .map(x => ({
+        item: String((x && x.item) || ""),
+        status: (x && ["ok", "caution", "ng"].includes(x.status)) ? x.status : "caution",
+        note: String((x && x.note) || "")
+      }))
+      .filter(x => x.item);
+
+    // 公式確認済みの原材料で、通常判定と同じロジックの再判定を行う
+    const ingredients = (Array.isArray(json.ingredients) ? json.ingredients : []).map(s => String(s).trim()).filter(Boolean);
+    const additives = (Array.isArray(json.additives) ? json.additives : []).map(s => String(s).trim()).filter(Boolean);
+    const additiveSet = new Set(additives.map(norm));
+    const statusToRisk = { ng: "high", caution: "medium", ok: "low" };
+    const statusToDk = { ng: "banned", caution: "restricted", ok: "approved" };
+
+    const items = [];
+    const seenIds = new Set();
+    const processed = new Set();
+    for (const ing of ingredients.concat(additives)) {
+      const nkey = norm(ing);
+      if (!nkey || processed.has(nkey)) continue;
+      processed.add(nkey);
+      const hit = findAdditive(ing);
+      if (hit) {
+        if (!seenIds.has(hit.id)) {
+          seenIds.add(hit.id);
+          items.push({
+            name: hit.name, eNumber: hit.eNumber, category: hit.category,
+            riskLevel: hit.riskLevel, denmarkStatus: hit.denmarkStatus,
+            concern: hit.concern, source: "db", matched: ing
+          });
+        }
+      } else if (additiveSet.has(nkey)) {
+        // マスタにない添加物は、AIのデンマーク基準表の評価を使う
+        const row = dkRows.find(rw => {
+          const rn = norm(rw.item);
+          return rn && (rn === nkey || rn.includes(nkey) || nkey.includes(rn));
+        });
+        const status = row ? row.status : "caution";
+        items.push({
+          name: ing, eNumber: null, category: "AI判定(検索裏付け)",
+          riskLevel: statusToRisk[status], denmarkStatus: statusToDk[status],
+          concern: (row && row.note) || "検索結果に基づくAI判定", source: "ai", matched: ing
+        });
+      }
+    }
+
+    const yondokuEnabled = isYondokuOn();
+    const yondoku = yondokuEnabled ? checkYondoku(ingredients) : null;
+    const ngList = await store.list("customNG");
+    const ngHits = checkCustomNG(ingredients, json.productName || productName, ngList);
+    const verdict = computeVerdict(items, yondoku, ngHits, yondokuEnabled);
+
+    const result = {
+      name: String(json.productName || productName),
+      verdict,
+      date: new Date().toISOString(),
+      inputType: "detail",
+      estimated: false,
+      offline: false,
+      summary: buildSummary(verdict, items, yondoku, ngHits, yondokuEnabled),
+      details: items,
+      ingredients,
+      yondoku,
+      ngHits,
+      detailData: {
+        confirmed: json.confirmed !== false,
+        healthEffects,
+        denmarkCompliance: dkRows,
+        denmarkOverall: (typeof json.denmarkOverall === "boolean") ? json.denmarkOverall : !items.some(i => i.riskLevel === "high"),
+        comment: String(json.comment || ""),
+        sources
+      }
+    };
+    lastResult = result;
+
+    await saveHistory(result);
+
+    setLoading(null);
+    renderDetailResult(result, $("result-area"));
+    $("result-area").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    setLoading(null);
+    showError(e);
+  }
+}
+
+// 詳細調査の結果を、ブロック構成で表示する
+function renderDetailResult(r, containerEl) {
+  window.__shownResult = r;
+  const v = VERDICTS[r.verdict] || VERDICTS["△"];
+  const d = r.detailData || {};
+  let html = '<div class="card">';
+
+  html += '<div style="text-align:center;margin-bottom:6px"><span class="src-label" style="font-size:0.8rem">🔎 詳細調査(Web検索で裏付け)</span></div>';
+  html += '<div class="verdict-circle" style="background:' + v.color + '">' + r.verdict + "</div>";
+  html += '<div class="verdict-label" style="color:' + v.color + '">' + escapeHtml(v.label) + "</div>";
+  html += '<div style="text-align:center;font-weight:700;margin-bottom:8px">' + escapeHtml(r.name || "") + "</div>";
+
+  if (!d.confirmed) {
+    html += '<div class="info-box">💡 メーカー公式・通販の原材料情報が見つからなかったため、AIの一般知識で補って評価しています。</div>';
+  }
+
+  // 📋 原材料・添加物
+  html += "<h2>📋 原材料・添加物" + (d.confirmed ? "(公式確認済み)" : "(推定)") + "</h2>";
+  if (r.ingredients && r.ingredients.length) {
+    html += '<div class="ing-detail" style="margin-top:0">' + escapeHtml(r.ingredients.join("、")) + "</div>";
+  } else {
+    html += '<p class="note">原材料情報を取得できませんでした。</p>';
+  }
+  if (r.details && r.details.length) {
+    r.details.forEach(dd => {
+      const badge = '<span class="badge ' + dd.riskLevel + '">' + (RISK_LABELS[dd.riskLevel] || "?") + "</span>";
+      const src = '<span class="src-label">' + (dd.source === "db" ? "マスタDB" : "AI判定") + "</span>";
+      const en = dd.eNumber ? "(" + escapeHtml(dd.eNumber) + ")" : "";
+      html += '<div class="ing-item">' +
+        '<div class="ing-head" onclick="this.nextElementSibling.classList.toggle(\'hidden\')">' +
+          '<span class="ing-name">' + escapeHtml(dd.name) + en + src + "</span>" + badge +
+        "</div>" +
+        '<div class="ing-detail hidden">' +
+          "<div><b>" + escapeHtml(DK_LABELS[dd.denmarkStatus] || "扱い不明") + "</b></div>" +
+          "<div>" + escapeHtml(dd.concern || "") + "</div>" +
+        "</div>" +
+      "</div>";
+    });
+  }
+
+  // 🟢 健康への影響(表形式)
+  if (d.healthEffects && d.healthEffects.length) {
+    html += '<h2>🟢 健康への影響</h2><table class="dtable"><tr><th>項目</th><th>評価</th><th>メモ</th></tr>';
+    const ratingClass = { "良い": "low", "注意": "medium", "悪い": "high" };
+    d.healthEffects.forEach(h => {
+      const cls = ratingClass[h.rating] || "none";
+      html += "<tr><td>" + escapeHtml(h.item) + '</td><td><span class="badge ' + cls + '">' + escapeHtml(h.rating || "-") + "</span></td><td>" + escapeHtml(h.note) + "</td></tr>";
+    });
+    html += "</table>";
+  }
+
+  // 🇩🇰 デンマーク(EU)基準への適合性(表形式+総合)
+  if (d.denmarkCompliance && d.denmarkCompliance.length) {
+    html += '<h2>🇩🇰 デンマーク(EU)基準への適合性</h2><table class="dtable"><tr><th>成分・観点</th><th>適合</th><th>メモ</th></tr>';
+    const icon = { ok: "✅", caution: "⚠️", ng: "❌" };
+    d.denmarkCompliance.forEach(row => {
+      html += "<tr><td>" + escapeHtml(row.item) + '</td><td style="text-align:center">' + (icon[row.status] || "⚠️") + "</td><td>" + escapeHtml(row.note) + "</td></tr>";
+    });
+    html += "</table>";
+  }
+  html += '<div style="text-align:center;font-weight:700;font-size:1.05rem;margin:12px 0;color:' + (d.denmarkOverall ? "var(--v-best)" : "var(--v-bad)") + '">🇩🇰 総合:' + (d.denmarkOverall ? "✅ デンマーク基準に適合" : "❌ デンマーク基準では不適合") + "</div>";
+
+  // 📝 総合評価コメント
+  if (d.comment) {
+    html += '<h2>📝 総合評価コメント</h2><div class="verdict-summary">' + escapeHtml(d.comment).replace(/\n/g, "<br>") + "</div>";
+  }
+
+  // 四毒チェック(通常判定と同じ枠)
+  if (r.yondoku) {
+    html += '<h2>☠️ 四毒チェック</h2><div class="yondoku-grid">';
+    for (const kind of Object.keys(YONDOKU)) {
+      const def = YONDOKU[kind];
+      const hit = r.yondoku[kind];
+      html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
+    }
+    html += "</div>";
+  }
+  if (r.ngHits && r.ngHits.length > 0) {
+    html += '<div class="alert-box" style="margin-top:12px">🚫 NG成分:' + escapeHtml(r.ngHits.join("・")) + "</div>";
+  }
+
+  // 🔗 情報ソースのリンク一覧
+  if (d.sources && d.sources.length) {
+    html += '<h2>🔗 情報ソース</h2><div class="src-list">';
+    d.sources.forEach(s => {
+      if (!/^https?:\/\//.test(s.url || "")) return;
+      html += '<div style="margin-bottom:6px">・<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title || s.url) + "</a></div>";
+    });
+    html += "</div>";
+  }
+
+  html += '<div style="margin-top:14px"><button class="btn-main" onclick="saveFavoriteFromShown()">⭐ お気に入り(OK食品)に保存</button></div>';
+  html += '<p class="note" style="text-align:center">📋 履歴には自動保存済みです</p>';
+  html += '<div class="disclaimer">本判定は参考情報です。最終的な判断はご自身で行ってください。</div>';
+  html += "</div>";
+  containerEl.innerHTML = html;
+}
+
+// 表示中の結果をお気に入りに保存する(詳細調査カード・履歴表示用)
+async function saveFavoriteFromShown() {
+  const r = window.__shownResult;
+  if (!r) { showToast("保存する判定結果がありません"); return; }
+  const copy = Object.assign({}, r);
+  delete copy.key;
+  await store.add("favorites", copy);
+  showToast("⭐ お気に入りに保存しました");
+}
+
+/* ============================================================
+   16-3. 比較・ランキング機能
+   ------------------------------------------------------------
+   履歴・お気に入りから2〜5件選んで横並びの表で比較。
+   「おすすめ順」は 判定→NG→×成分→四毒→△成分 の少なさで
+   端末内で計算する(API費用はかからない)。
+   ============================================================ */
+let currentTab = "check";
+let compareMode = false;
+let compareSel = {};     // "リスト名|保存キー" → {listName, key}
+let compareItems = [];   // 比較画面に表示中の商品
+
+function toggleCompareMode() {
+  compareMode = !compareMode;
+  if (!compareMode) compareSel = {};
+  updateCompareBar();
+  if (currentTab === "history") renderHistory();
+  if (currentTab === "favorites") renderFavorites();
+  if (compareMode) showToast("比較したい商品にチェックを入れてください(2〜5件)");
+}
+
+function toggleCompareSel(listName, key, cb) {
+  const id = listName + "|" + key;
+  if (cb.checked) {
+    if (Object.keys(compareSel).length >= 5) {
+      cb.checked = false;
+      showToast("比較できるのは5件までです");
+      return;
+    }
+    compareSel[id] = { listName, key };
+  } else {
+    delete compareSel[id];
+  }
+  updateCompareBar();
+}
+
+function updateCompareBar() {
+  const n = Object.keys(compareSel).length;
+  $("compare-count").textContent = n;
+  const show = compareMode && (currentTab === "history" || currentTab === "favorites");
+  $("compare-bar").classList.toggle("hidden", !show);
+}
+
+// おすすめ順の点数(小さいほど良い)
+function scoreItem(it) {
+  const ranks = { "◎": 0, "○": 1, "△": 2, "×": 3 };
+  const vRank = (it.verdict in ranks) ? ranks[it.verdict] : 2;
+  const det = it.details || [];
+  const high = det.filter(x => x.riskLevel === "high").length;
+  const medium = det.filter(x => x.riskLevel === "medium").length;
+  const low = det.filter(x => x.riskLevel === "low").length;
+  const y = it.yondoku ? Object.keys(YONDOKU).filter(k => it.yondoku[k]).length : 0;
+  const ng = (it.ngHits || []).length;
+  return vRank * 1000 + ng * 200 + high * 50 + y * 20 + medium * 10 + low;
+}
+
+async function runCompare() {
+  const sel = Object.values(compareSel);
+  if (sel.length < 2) { showToast("2件以上選んでください"); return; }
+  const hist = await store.list("history");
+  const favs = await store.list("favorites");
+  const items = [];
+  for (const s of sel) {
+    const pool = (s.listName === "history") ? hist : favs;
+    const it = pool.find(x => x.key === s.key);
+    if (it) items.push(it);
+  }
+  if (items.length < 2) { showToast("比較データが見つかりませんでした"); return; }
+  compareItems = items;
+  renderCompare(items, false);
+  $("compare-overlay").classList.remove("hidden");
+}
+
+function rankCompare() {
+  if (compareItems.length < 2) return;
+  renderCompare(compareItems, true);
+  showToast("🏆 おすすめ順に並び替えました");
+}
+
+function closeCompare() {
+  $("compare-overlay").classList.add("hidden");
+}
+
+function renderCompare(items, ranked) {
+  let list = items.slice();
+  if (ranked) list.sort((a, b) => scoreItem(a) - scoreItem(b));
+  const medals = ["🥇", "🥈", "🥉", "4位", "5位"];
+  const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ", detail: "🔎 詳細調査" };
+  const cnt = (it, lv) => (it.details || []).filter(x => x.riskLevel === lv).length;
+
+  let html = '<div class="cmp-wrap"><table class="cmp">';
+  html += '<tr><th class="rowh">商品名</th>' + list.map((it, i) => {
+    const rank = ranked ? '<div style="font-size:1.05rem">' + medals[i] + "</div>" : "";
+    return "<th>" + rank + escapeHtml(it.name || "(名称不明)") + "</th>";
+  }).join("") + "</tr>";
+  html += '<tr><th class="rowh">総合判定</th>' + list.map(it => {
+    const v = VERDICTS[it.verdict] || VERDICTS["△"];
+    return '<td><span style="display:inline-flex;width:34px;height:34px;border-radius:50%;background:' + v.color + ';color:#fff;font-weight:800;align-items:center;justify-content:center">' + it.verdict + "</span></td>";
+  }).join("") + "</tr>";
+  html += '<tr><th class="rowh">×要注意の添加物</th>' + list.map(it => "<td>" + (cnt(it, "high") ? cnt(it, "high") + "件 ⚠️" : "0件") + "</td>").join("") + "</tr>";
+  html += '<tr><th class="rowh">△注意の添加物</th>' + list.map(it => "<td>" + cnt(it, "medium") + "件</td>").join("") + "</tr>";
+  html += '<tr><th class="rowh">○低リスクの添加物</th>' + list.map(it => "<td>" + cnt(it, "low") + "件</td>").join("") + "</tr>";
+  for (const kind of Object.keys(YONDOKU)) {
+    const def = YONDOKU[kind];
+    html += '<tr><th class="rowh">' + def.emoji + " " + def.label + "</th>" + list.map(it =>
+      "<td>" + (it.yondoku ? (it.yondoku[kind] ? "あり ⚠️" : "なし ✅") : "未チェック") + "</td>").join("") + "</tr>";
+  }
+  html += '<tr><th class="rowh">🚫 NG成分</th>' + list.map(it =>
+    "<td>" + ((it.ngHits && it.ngHits.length) ? escapeHtml(it.ngHits.join("・")) : "なし") + "</td>").join("") + "</tr>";
+  html += '<tr><th class="rowh">調べ方</th>' + list.map(it => "<td>" + (typeLabel[it.inputType] || "-") + "</td>").join("") + "</tr>";
+  html += "</table></div>";
+  html += '<p class="note" style="margin-top:10px">' + (ranked
+    ? "🏆 総合判定・NG成分・要注意添加物・四毒の少なさをもとに、おすすめ順に並べています。"
+    : "表は左右にスクロールして見比べられます。") + "</p>";
+  $("compare-content").innerHTML = html;
+}
+
+/* ============================================================
    17. 画面切り替え(下部タブ)
    ============================================================ */
 function switchTab(name) {
+  currentTab = name;
   ["check", "history", "favorites", "settings"].forEach(t => {
     $("view-" + t).classList.toggle("hidden", t !== name);
     $("tab-" + t).classList.toggle("active", t === name);
@@ -1358,6 +1867,7 @@ function switchTab(name) {
   if (name === "history") renderHistory();
   if (name === "favorites") renderFavorites();
   if (name === "settings") renderNGList();
+  updateCompareBar();
   window.scrollTo(0, 0);
 }
 
