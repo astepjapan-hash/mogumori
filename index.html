@@ -547,7 +547,7 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3.2";
+const APP_VERSION = "v1.3.3";
 const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒の後追い";
 
 // 判定マークの表示設定
@@ -1639,36 +1639,47 @@ async function saveHistory(result) {
 }
 
 /* 分類の絞り込みボタン(チップ)を作る。
-   実際に登録されている分類だけを、使われている数の多い順に並べます */
-function renderChips(items, containerId, selected, onclickName) {
+   実際に登録されている分類だけを、使われている数の多い順に並べます。
+   ※分類名は data-cat に持たせ、押されたときにまとめて受け取ります。
+     (分類名を直接ボタンの命令文に埋め込むと、日本語や記号で
+      うまく動かないことがあったため、この方式にしています) */
+function renderChips(items, containerId, selected, which) {
   const box = $(containerId);
   if (!box) return;
   const counts = {};
   items.forEach(it => { if (it.category) counts[it.category] = (counts[it.category] || 0) + 1; });
   const cats = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b));
+
+  // 押されたときの受け皿を用意する(何度作り直しても1つだけ)
+  box.onclick = (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest(".chip") : null;
+    if (!btn || !box.contains(btn)) return;
+    const cat = btn.getAttribute("data-cat") || "";
+    if (which === "hist") { histCat = cat; renderHistory(); }
+    else { favCat = cat; renderFavorites(); }
+  };
+
   if (cats.length === 0) {
     box.innerHTML = '<span class="note">分類を登録すると、ここにボタンが出てタップで絞り込めます。</span>';
     return;
   }
-  let html = '<button class="chip' + (selected ? "" : " on") + '" onclick="' + onclickName + '(\'\')">すべて</button>';
+  let html = '<button type="button" class="chip' + (selected ? "" : " on") + '" data-cat="">すべて</button>';
   cats.forEach(c => {
-    html += '<button class="chip' + (selected === c ? " on" : "") + '" onclick="' + onclickName + '(' + JSON.stringify(c) + ')">' +
+    html += '<button type="button" class="chip' + (selected === c ? " on" : "") + '" data-cat="' + escapeHtml(c) + '">' +
       escapeHtml(c) + "(" + counts[c] + ")</button>";
   });
   box.innerHTML = html;
 }
 
-// 選ばれている分類(履歴用・お気に入り用)
+// 選ばれている分類(履歴用・お気に入り用)。切り替えは renderChips の中で行います
 let histCat = "";
 let favCat = "";
-function setHistCat(c) { histCat = c; renderHistory(); }
-function setFavCat(c) { favCat = c; renderFavorites(); }
 
 async function renderHistory() {
   const el = $("history-list");
   const all0 = await store.list("history");
   all0.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  renderChips(all0, "hist-chips", histCat, "setHistCat");
+  renderChips(all0, "hist-chips", histCat, "hist");
 
   // 文字検索(商品名・メーカー)と分類での絞り込み
   const q = norm(($("hist-search") && $("hist-search").value) || "");
@@ -1760,7 +1771,7 @@ async function renderFavorites() {
   const q = norm($("fav-search").value);
   const all0 = await store.list("favorites");
   all0.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  renderChips(all0, "fav-chips", favCat, "setFavCat");
+  renderChips(all0, "fav-chips", favCat, "fav");
 
   let all = all0;
   if (favCat) all = all.filter(x => x.category === favCat);
