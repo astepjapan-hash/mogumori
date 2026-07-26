@@ -568,8 +568,8 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3.5";
-const APP_VERSION_NOTE = "☠️四毒アリ/ナシ切替・⭐お気に入りの二重登録防止";
+const APP_VERSION = "v1.3.6";
+const APP_VERSION_NOTE = "⭐二重登録防止・🔎詳細調査がラベル読み取り結果を引き継ぐ";
 
 // 判定マークの表示設定
 const VERDICTS = {
@@ -2071,25 +2071,57 @@ function collectCitations(data) {
 function startDetailFromShown() {
   const r = window.__shownResult;
   if (!r || !r.name) { showToast("先に通常の判定を行ってください"); return; }
-  startDetailCheck(r.name);
+  startDetailCheck(r.name, r);   // 読み取り済みの原材料も一緒に渡す
 }
 
-// 詳細調査の本体
-async function startDetailCheck(productName) {
+/* すでに読み取ってある原材料を、そのまま信用してよいか判定する。
+   ラベル/パッケージを撮影して読み取ったものは「実物の表示」なので信用します。
+   商品名からAIが推定しただけのもの(estimated)は信用しません。 */
+function hasReadIngredients(r) {
+  return !!(r && !r.estimated && Array.isArray(r.ingredients) && r.ingredients.length > 0);
+}
+
+// 詳細調査の本体。base には、直前の判定結果(読み取り済みの原材料など)を渡します
+async function startDetailCheck(productName, base) {
   // 費用がかかるため、実行前に必ず確認する
   if (!confirm("検索を含む詳細調査を行います(通常より時間と費用がかかります)。実行しますか?")) return;
 
+  // 撮影して読み取り済みの原材料があれば、それを検索の出発点にする
+  const known = hasReadIngredients(base) ? base.ingredients.slice(0, 60) : [];
+  const maker = (base && base.maker) ? String(base.maker).trim() : "";
+
   try {
     setLoading("🔎 Webで公式情報を検索しています…(30秒〜1分ほどかかります)");
-    const prompt =
-      "あなたは食品安全の調査員です。「" + productName + "」という日本の市販食品について、Web検索で実際の原材料・添加物を調べてください。\n" +
-      "・まず「" + productName + " 原材料 添加物 成分」で検索してください。\n" +
+
+    let prompt =
+      "あなたは食品安全の調査員です。「" + productName + "」という日本の市販食品について、" +
+      (maker ? "メーカーは「" + maker + "」です。" : "") +
+      "Web検索で実際の原材料・添加物を調べてください。\n";
+
+    if (known.length > 0) {
+      // ラベル撮影で原材料が判明している場合は、それを事実として扱わせる
+      prompt +=
+        "\n【重要】この商品の原材料は、すでに実物の商品ラベルを撮影して読み取ってあります。次のとおりです。\n" +
+        "---読み取り済みの原材料---\n" + known.join("、") + "\n---ここまで---\n" +
+        "・このリストを『確定した事実』として扱ってください。Web検索は、裏付け・添加物の詳細確認・不足情報の補完のために使ってください。\n" +
+        "・商品ページが見つからなくても『原材料が確認できない』『評価不可』と結論づけてはいけません。必ず上のリストに基づいて評価を行ってください。\n" +
+        "・ingredients は上のリストを基本にし、絶対に空にしないでください(検索で表記が確認できた場合のみ整えてよい)。\n" +
+        "・原材料が判明しているので confirmed は true にしてください。\n" +
+        "・商品名は撮影時の読み取り間違いの可能性があります。検索で正式名称が確認できた場合のみ productName をその正式名称に直し、確認できなければ「" + productName + "」のままにしてください。\n" +
+        "・healthEffects と denmarkCompliance は、必ず上の原材料そのものについて評価してください。『類似品の参考評価』や『評価不可』は書かないでください。\n";
+    } else {
+      prompt += "・まず「" + productName + " 原材料 添加物 成分」で検索してください。\n";
+    }
+
+    prompt +=
       "・情報源はメーカー公式サイトを最優先、なければ大手通販サイト(Amazon・楽天・ヨドバシ等)の商品ページを使ってください。\n" +
       "・確認できた事実に基づいて、健康への影響と、デンマーク/EUの食品添加物基準(EC No 1333/2008等)への適合性を評価してください。\n" +
       "・判断に迷う場合は厳しめ(注意側)に評価してください。\n" +
       "調査が終わったら、次の形のJSONだけを出力してください。前置き・説明・コードブロックは禁止です。\n" +
       DETAIL_SCHEMA + "\n" +
-      "・公式の原材料情報が確認できなかった場合は confirmed を false にし、一般知識で補って comment にその旨を明記してください。\n" +
+      (known.length > 0
+        ? "・comment には、原材料がラベル読み取り由来であることと、公式サイトで裏付けが取れたかどうかを書いてください。\n"
+        : "・公式の原材料情報が確認できなかった場合は confirmed を false にし、一般知識で補って comment にその旨を明記してください。\n") +
       "・sources には実際に参照したページを載せてください。";
 
     const data = await callClaudeWithSearch(prompt, 5000);
@@ -2136,7 +2168,11 @@ async function startDetailCheck(productName) {
       .filter(x => x.item);
 
     // 公式確認済みの原材料で、通常判定と同じロジックの再判定を行う
-    const ingredients = (Array.isArray(json.ingredients) ? json.ingredients : []).map(s => String(s).trim()).filter(Boolean);
+    let ingredients = (Array.isArray(json.ingredients) ? json.ingredients : []).map(s => String(s).trim()).filter(Boolean);
+    // 検索で原材料が取れなかったときも、ラベルから読み取った内容は必ず残す
+    if (ingredients.length === 0 && known.length > 0) ingredients = known.slice();
+    // 原材料がどこ由来かを覚えておき、画面の見出しに出す
+    const ingredientSource = (known.length > 0) ? "label" : ((json.confirmed === false) ? "ai" : "web");
     const additives = (Array.isArray(json.additives) ? json.additives : []).map(s => String(s).trim()).filter(Boolean);
     const additiveSet = new Set(additives.map(norm));
     const statusToRisk = { ng: "high", caution: "medium", ok: "low" };
@@ -2174,13 +2210,14 @@ async function startDetailCheck(productName) {
       }
     }
 
-    const yondokuEnabled = isYondokuOn();
+    const prev = base || window.__shownResult || {};
+    // 元の判定で四毒を「アリ」にしていた場合は、詳細調査の結果にも引き継ぐ
+    const yondokuEnabled = isYondokuOn() || isYondokuApplied(prev);
     const yondoku = yondokuEnabled ? checkYondoku(ingredients) : null;
     const ngList = await store.list("customNG");
     const ngHits = checkCustomNG(ingredients, json.productName || productName, ngList);
     const verdict = computeVerdict(items, yondoku, ngHits, yondokuEnabled);
 
-    const prev = window.__shownResult || {};
     const result = {
       name: String(json.productName || productName),
       maker: prev.maker || "",       // 元の判定で入力した情報を引き継ぐ
@@ -2197,7 +2234,9 @@ async function startDetailCheck(productName) {
       yondokuApplied: yondokuEnabled,  // 四毒を総合判定に反映しているか(あとから切替可)
       ngHits,
       detailData: {
-        confirmed: json.confirmed !== false,
+        // ラベルから読み取った原材料がある場合は、それ自体が確かな情報なので確認済み扱い
+        confirmed: (known.length > 0) ? true : (json.confirmed !== false),
+        ingredientSource,
         healthEffects,
         denmarkCompliance: dkRows,
         denmarkOverall: (typeof json.denmarkOverall === "boolean") ? json.denmarkOverall : !items.some(i => i.riskLevel === "high"),
@@ -2236,12 +2275,18 @@ function renderDetailResult(r, containerEl) {
   }
   html += buildEditBlockHtml(r);
 
-  if (!d.confirmed) {
+  // 原材料がどこから来たかで、見出しと注意書きを変える
+  // label=撮影したラベルから読み取り / web=公式・通販ページで確認 / ai=一般知識で推定
+  const iSrc = d.ingredientSource || (d.confirmed ? "web" : "ai");
+  if (iSrc === "ai") {
     html += '<div class="info-box">💡 メーカー公式・通販の原材料情報が見つからなかったため、AIの一般知識で補って評価しています。</div>';
+  } else if (iSrc === "label") {
+    html += '<div class="info-box">📷 撮影したラベルから読み取った原材料をもとに、Web検索で裏付けを取って評価しています。</div>';
   }
 
   // 📋 原材料・添加物
-  html += "<h2>📋 原材料・添加物" + (d.confirmed ? "(公式確認済み)" : "(推定)") + "</h2>";
+  const iSrcLabel = { label: "(ラベル読み取り済み)", web: "(公式確認済み)", ai: "(推定)" };
+  html += "<h2>📋 原材料・添加物" + (iSrcLabel[iSrc] || "") + "</h2>";
   if (r.ingredients && r.ingredients.length) {
     html += '<div class="ing-detail" style="margin-top:0">' + escapeHtml(r.ingredients.join("、")) + "</div>";
   } else {
