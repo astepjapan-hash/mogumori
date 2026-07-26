@@ -80,6 +80,13 @@ button {
 }
 .btn-danger { background: #FBEAEA; color: var(--v-bad); padding: 8px 12px; font-size: 0.9rem; }
 .btn-small { padding: 8px 12px; font-size: 0.9rem; min-height: 40px; }
+/* 「登録済み」など、押せないことを示す表示(ボタンではなくラベル) */
+.btn-done {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #EDEFE9; color: #8A8F85;
+  border-radius: 12px; padding: 8px 12px;
+  font-size: 0.9rem; font-weight: 600; min-height: 40px;
+}
 input[type=text], input[type=password], select, textarea {
   width: 100%;
   font-family: inherit;
@@ -561,8 +568,8 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3.4";
-const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒アリ/ナシ切替";
+const APP_VERSION = "v1.3.5";
+const APP_VERSION_NOTE = "☠️四毒アリ/ナシ切替・⭐お気に入りの二重登録防止";
 
 // 判定マークの表示設定
 const VERDICTS = {
@@ -1752,8 +1759,10 @@ async function renderHistory() {
     return;
   }
   const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ", detail: "🔎 詳細調査" };
+  const favIds = await loadFavoriteIds();   // すでにお気に入りに入っている商品を調べておく
   el.innerHTML = all.map(item => {
     const v = VERDICTS[item.verdict] || VERDICTS["△"];
+    const already = !!favIds[favIdOf(item)];
     const d = item.date ? new Date(item.date) : null;
     const dateStr = d ? (d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0")) : "";
     return '<div class="list-item">' +
@@ -1769,7 +1778,9 @@ async function renderHistory() {
       '<div class="hidden">' +
         '<div class="list-actions">' +
           '<button class="btn-sub btn-small" onclick=\'showStoredResult(' + JSON.stringify(item.key) + ', "history")\'>詳細をみる</button>' +
-          '<button class="btn-sub btn-small" onclick=\'addFavoriteFromHistory(' + JSON.stringify(item.key) + ')\'>⭐ お気に入りへ</button>' +
+          (already
+            ? '<span class="btn-done">⭐ お気に入り済み</span>'
+            : '<button class="btn-sub btn-small" onclick=\'addFavoriteFromHistory(' + JSON.stringify(item.key) + ', this)\'>⭐ お気に入りへ</button>') +
           '<button class="btn-danger btn-small" onclick=\'deleteItem("history", ' + JSON.stringify(item.key) + ')\'>削除</button>' +
         "</div>" +
       "</div>" +
@@ -1807,23 +1818,70 @@ async function deleteItem(listName, key) {
 
 /* ============================================================
    14. お気に入り(OK食品リスト)
+   ------------------------------------------------------------
+   同じ商品を二重・三重にお気に入り登録しないよう、
+   「商品名+メーカー」が同じものは登録済みとして扱います。
    ============================================================ */
+
+/* 同じ商品かを見分けるための合い言葉を作る。
+   全角/半角・大文字小文字・空白の違いは無視して比べます。
+   商品名が空のものは、他と同じ扱いにならないよう空を返します。 */
+function favIdOf(item) {
+  const n = norm(item && item.name);
+  if (!n) return "";
+  return n + "|" + norm(item && item.maker);
+}
+
+/* いまお気に入りに入っている商品の合い言葉を、まとめて取り出す */
+async function loadFavoriteIds() {
+  const favs = await store.list("favorites");
+  const ids = {};
+  favs.forEach(f => { const id = favIdOf(f); if (id) ids[id] = true; });
+  return ids;
+}
+
+/* すでにお気に入りに入っているか調べる */
+async function isAlreadyFavorite(item) {
+  const id = favIdOf(item);
+  if (!id) return false;
+  const ids = await loadFavoriteIds();
+  return !!ids[id];
+}
+
 async function saveFavoriteFromLast() {
   if (!lastResult) { showToast("先に判定を実行してください"); return; }
+  if (await isAlreadyFavorite(lastResult)) { showToast("⭐ すでにお気に入りに登録済みです"); return; }
   const copy = Object.assign({}, lastResult);
   delete copy.key; delete copy.historyKey; delete copy.favoriteKey;
   lastResult.favoriteKey = await store.add("favorites", copy);
   showToast("⭐ お気に入りに保存しました");
 }
 
-async function addFavoriteFromHistory(key) {
+/* 履歴から「お気に入りへ」。すでに入っている商品は登録せず、
+   ボタンをその場で「お気に入り済み」の表示に差し替えます。 */
+async function addFavoriteFromHistory(key, btnEl) {
   const all = await store.list("history");
   const item = all.find(x => x.key === key);
   if (!item) { showToast("データが見つかりません"); return; }
+
+  if (await isAlreadyFavorite(item)) {
+    showToast("⭐ すでにお気に入りに登録済みです");
+    markFavoriteDone(btnEl);
+    return;
+  }
   const copy = Object.assign({}, item);
-  delete copy.key;
+  delete copy.key; delete copy.historyKey; delete copy.favoriteKey;
   await store.add("favorites", copy);
   showToast("⭐ お気に入りに追加しました");
+  markFavoriteDone(btnEl);
+}
+
+/* 「⭐ お気に入りへ」ボタンを「⭐ お気に入り済み」の表示に置き換える
+   (一覧を作り直さないので、開いている行が閉じてしまいません) */
+function markFavoriteDone(btnEl) {
+  if (btnEl && btnEl.outerHTML !== undefined) {
+    btnEl.outerHTML = '<span class="btn-done">⭐ お気に入り済み</span>';
+  }
 }
 
 async function renderFavorites() {
@@ -2260,9 +2318,10 @@ function renderDetailResult(r, containerEl) {
 async function saveFavoriteFromShown() {
   const r = window.__shownResult;
   if (!r) { showToast("保存する判定結果がありません"); return; }
+  if (await isAlreadyFavorite(r)) { showToast("⭐ すでにお気に入りに登録済みです"); return; }
   const copy = Object.assign({}, r);
-  delete copy.key;
-  await store.add("favorites", copy);
+  delete copy.key; delete copy.historyKey; delete copy.favoriteKey;
+  r.favoriteKey = await store.add("favorites", copy);
   showToast("⭐ お気に入りに保存しました");
 }
 
