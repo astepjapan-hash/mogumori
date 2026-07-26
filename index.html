@@ -325,6 +325,10 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
         <div style="margin-top:10px">
           <button class="btn-main" onclick="document.getElementById('photo-input').click()">📷 カメラで撮影する</button>
         </div>
+        <div class="info-box" style="margin:10px 0 0">
+          ✂️ 撮影した<b>あと</b>に、読み取る範囲を切り取る画面が出ます。<br>
+          必要な部分だけにすると読み取りが速くなり、利用料も安くなります。
+        </div>
         <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="onPhotoSelected(this)">
       </div>
 
@@ -534,7 +538,7 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3";
+const APP_VERSION = "v1.3.1";
 const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒の後追い";
 
 // 判定マークの表示設定
@@ -893,21 +897,53 @@ function onPhotoSelected(inputEl) {
     return;
   }
 
-  const url = URL.createObjectURL(file);
-  const im = $("crop-img");
-  im.onload = () => {
-    URL.revokeObjectURL(url);
-    crop.img = im;
-    $("crop-overlay").classList.remove("hidden");
-    // 画像が画面に描かれてから、初期の選択枠(中央8割)を決める
-    requestAnimationFrame(() => {
-      const r = im.getBoundingClientRect();
-      crop.box = { x: r.width * 0.10, y: r.height * 0.10, w: r.width * 0.80, h: r.height * 0.80 };
-      drawCropBox();
-    });
-  };
-  im.onerror = () => { URL.revokeObjectURL(url); showToast("画像を読み込めませんでした"); };
-  im.src = url;
+  try {
+    const url = URL.createObjectURL(file);
+    const im = $("crop-img");
+    if (!im) { // 万一この画面の部品が無い古い版なら、切り取りなしで従来どおり進める
+      showToast("切り取り画面を開けませんでした。そのまま読み取ります");
+      compressWholeFile(file).then(runPhotoCheck).catch(e => showError(e));
+      return;
+    }
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      crop.img = im;
+      $("crop-overlay").classList.remove("hidden");
+      // 画像が画面に描かれてから、初期の選択枠(中央8割)を決める
+      const setBox = () => {
+        const r = im.getBoundingClientRect();
+        if (r.width < 10) { setTimeout(setBox, 50); return; } // 描画待ち
+        crop.box = { x: r.width * 0.10, y: r.height * 0.10, w: r.width * 0.80, h: r.height * 0.80 };
+        drawCropBox();
+      };
+      requestAnimationFrame(setBox);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); showToast("画像を読み込めませんでした"); };
+    im.src = url;
+  } catch (e) {
+    showError(new Error("写真を開けませんでした:" + (e.message || "")));
+  }
+}
+
+// 切り取り画面が使えなかったときの予備:写真全体を縮小して使う
+function compressWholeFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1568;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const long = Math.max(w, h);
+      if (long > MAX) { const k = MAX / long; w = Math.round(w * k); h = Math.round(h * k); }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("画像を読み込めませんでした")); };
+    img.src = url;
+  });
 }
 
 // 選択枠を画面に反映し、送信サイズの目安も表示する
