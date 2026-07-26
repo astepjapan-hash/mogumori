@@ -156,6 +156,20 @@ label { font-size: 0.88rem; font-weight: 600; color: #556; display: block; margi
   background: #F0F5EE; color: var(--main);
 }
 .yondoku-cell.hit { background: #FDEFD8; color: #B26A00; }
+/* 四毒を総合判定に「反映しない」ときは、うすく表示して区別する */
+.yondoku-grid.off .yondoku-cell { opacity: 0.45; }
+/* 見出しの右に置く「アリ/ナシ」切り替えスイッチ */
+.yondoku-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap; margin: 18px 0 10px;
+}
+.yondoku-head h2 { margin: 0; }
+.seg { display: inline-flex; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; }
+.seg-btn {
+  border: none; border-radius: 0; background: #fff; color: #556;
+  font-size: 0.85rem; font-weight: 700; padding: 7px 16px; min-height: 38px;
+}
+.seg-btn.on { background: var(--main); color: #fff; }
 .disclaimer { font-size: 0.75rem; color: #999; text-align: center; margin-top: 14px; }
 
 /* 履歴・お気に入り */
@@ -547,8 +561,8 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3.3";
-const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒の後追い";
+const APP_VERSION = "v1.3.4";
+const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒アリ/ナシ切替";
 
 // 判定マークの表示設定
 const VERDICTS = {
@@ -1187,6 +1201,15 @@ function computeVerdict(additiveItems, yondoku, ngHits, yondokuEnabled) {
   return "◎";
 }
 
+/* 四毒の結果を「総合判定に反映しているか」を返す。
+   ・yondokuApplied が入っていればそれに従う
+   ・入っていない古い判定は、四毒データがあれば「反映あり」とみなす */
+function isYondokuApplied(r) {
+  if (!r) return false;
+  if (r.yondokuApplied === undefined || r.yondokuApplied === null) return !!r.yondoku;
+  return !!r.yondokuApplied;
+}
+
 // 判定理由のサマリー文(2〜3行)を組み立てる
 function buildSummary(verdict, items, yondoku, ngHits, yondokuEnabled) {
   const lines = [];
@@ -1393,6 +1416,7 @@ async function judgeAndShow(input) {
       details: items,
       ingredients,
       yondoku,
+      yondokuApplied: yondokuEnabled,  // 四毒を総合判定に反映しているか(あとから切替可)
       ngHits
     };
     lastResult = result;
@@ -1445,19 +1469,37 @@ function buildEditBlockHtml(r) {
   '</div>';
 }
 
-/* 四毒チェックの枠を作る。まだ実行していない場合は「今すぐ実行」ボタンを出す */
+/* 四毒チェックの枠を作る。
+   ・まだ調べていない場合  → 「今すぐ実行」ボタン
+   ・調べたあと           → 結果の4項目と、総合判定に「アリ/ナシ」の切り替えスイッチ
+   ナシにすると四毒を無視した◎○△×に戻り、アリにすると四毒込みの判定になります。 */
 function buildYondokuBlockHtml(r) {
-  let html = '<h2 style="margin-top:16px">☠️ 四毒チェック</h2>';
+  const applied = isYondokuApplied(r);
+
+  let html = '<div class="yondoku-head"><h2>☠️ 四毒チェック</h2>';
   if (r.yondoku) {
-    html += '<div class="yondoku-grid">';
+    html += '<div class="seg">' +
+      '<button type="button" class="seg-btn' + (applied ? " on" : "") + '" onclick="setYondokuApplied(true)">アリ</button>' +
+      '<button type="button" class="seg-btn' + (applied ? "" : " on") + '" onclick="setYondokuApplied(false)">ナシ</button>' +
+      "</div>";
+  }
+  html += "</div>";
+
+  if (r.yondoku) {
+    html += '<div class="yondoku-grid' + (applied ? "" : " off") + '">';
     for (const kind of Object.keys(YONDOKU)) {
       const def = YONDOKU[kind];
       const hit = r.yondoku[kind];
       html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
     }
     html += "</div>";
+    html += '<p class="note" style="margin-top:6px">' +
+      (applied
+        ? "「アリ」…四毒を含めて◎○△×を出しています。四毒を除いた判定を見たいときは「ナシ」を押してください。"
+        : "「ナシ」…上の四毒は参考表示だけで、◎○△×には反映していません。含めたいときは「アリ」を押してください。") +
+      "</p>";
   } else if (r.ingredients && r.ingredients.length > 0) {
-    html += '<div class="info-box" style="margin-bottom:8px">この判定では四毒チェックをしていません(設定でオフのため)。この商品だけ、今から調べられます。</div>';
+    html += '<div class="info-box" style="margin-bottom:8px">この判定では四毒チェックをしていません(設定でオフのため)。この商品だけ、今から調べられます。あとから「ナシ」に戻すこともできます。</div>';
     html += '<button class="btn-sub" style="width:100%" onclick="runYondokuNow()">☠️ 四毒チェックを実行する</button>';
   } else {
     html += '<p class="note">原材料の情報がないため、四毒チェックはできません。</p>';
@@ -1603,19 +1645,37 @@ async function runYondokuNow() {
   if (!r.ingredients || r.ingredients.length === 0) { showToast("原材料の情報がないため実行できません"); return; }
 
   r.yondoku = checkYondoku(r.ingredients);
-  // 四毒の結果を含めて総合判定を計算し直す
-  r.verdict = computeVerdict(r.details || [], r.yondoku, r.ngHits || [], true);
-  r.summary = buildSummary(r.verdict, r.details || [], r.yondoku, r.ngHits || [], true);
+  const hits = Object.keys(YONDOKU).filter(k => r.yondoku[k]).map(k => YONDOKU[k].label);
+  // 四毒の結果を含めて総合判定を計算し直す(あとで「ナシ」に戻せます)
+  await applyYondokuSetting(r, true,
+    hits.length ? "☠️ 四毒:" + hits.join("・") + " を検出" : "✅ 四毒は見つかりませんでした");
+}
+
+/* 四毒を総合判定に含めるかどうかを切り替える(アリ⇔ナシ、何度でも変更できます) */
+async function setYondokuApplied(on) {
+  const r = window.__shownResult;
+  if (!r) { showToast("判定結果がありません"); return; }
+  if (!r.yondoku) { showToast("先に四毒チェックを実行してください"); return; }
+  if (isYondokuApplied(r) === !!on) return;   // すでにその状態なら何もしない
+
+  await applyYondokuSetting(r, !!on,
+    on ? "☠️ 四毒を総合判定に含めました" : "総合判定から四毒を外しました");
+}
+
+/* 四毒の反映有無を決めて、総合判定・説明文を作り直し、保存して画面を更新する */
+async function applyYondokuSetting(r, on, message) {
+  r.yondokuApplied = on;
+  r.verdict = computeVerdict(r.details || [], r.yondoku, r.ngHits || [], on);
+  r.summary = buildSummary(r.verdict, r.details || [], r.yondoku, r.ngHits || [], on);
 
   try {
     await persistShownResult(r);
-    const hits = Object.keys(YONDOKU).filter(k => r.yondoku[k]).map(k => YONDOKU[k].label);
-    showToast(hits.length ? "☠️ 四毒:" + hits.join("・") + " を検出" : "✅ 四毒は見つかりませんでした");
-    if (r.detailData) renderDetailResult(r, $("result-area"));
-    else renderResult(r, $("result-area"), !!r.historyKey);
+    showToast(message + "(判定:" + r.verdict + ")");
   } catch (e) {
     showToast("保存に失敗しました:" + (e.message || ""));
   }
+  if (r.detailData) renderDetailResult(r, $("result-area"));
+  else renderResult(r, $("result-area"), !!r.historyKey);
 }
 
 /* ============================================================
@@ -2076,6 +2136,7 @@ async function startDetailCheck(productName) {
       details: items,
       ingredients,
       yondoku,
+      yondokuApplied: yondokuEnabled,  // 四毒を総合判定に反映しているか(あとから切替可)
       ngHits,
       detailData: {
         confirmed: json.confirmed !== false,
@@ -2256,7 +2317,8 @@ function scoreItem(it) {
   const high = det.filter(x => x.riskLevel === "high").length;
   const medium = det.filter(x => x.riskLevel === "medium").length;
   const low = det.filter(x => x.riskLevel === "low").length;
-  const y = it.yondoku ? Object.keys(YONDOKU).filter(k => it.yondoku[k]).length : 0;
+  // 四毒を「ナシ」にしている商品は、順位づけでも四毒を数えない
+  const y = isYondokuApplied(it) ? Object.keys(YONDOKU).filter(k => it.yondoku[k]).length : 0;
   const ng = (it.ngHits || []).length;
   return vRank * 1000 + ng * 200 + high * 50 + y * 20 + medium * 10 + low;
 }
@@ -2309,8 +2371,12 @@ function renderCompare(items, ranked) {
   html += '<tr><th class="rowh">○低リスクの添加物</th>' + list.map(it => "<td>" + cnt(it, "low") + "件</td>").join("") + "</tr>";
   for (const kind of Object.keys(YONDOKU)) {
     const def = YONDOKU[kind];
-    html += '<tr><th class="rowh">' + def.emoji + " " + def.label + "</th>" + list.map(it =>
-      "<td>" + (it.yondoku ? (it.yondoku[kind] ? "あり ⚠️" : "なし ✅") : "未チェック") + "</td>").join("") + "</tr>";
+    html += '<tr><th class="rowh">' + def.emoji + " " + def.label + "</th>" + list.map(it => {
+      if (!it.yondoku) return "<td>未チェック</td>";
+      // 「ナシ」にしている商品は、総合判定に反映していないことが分かるようにする
+      const off = isYondokuApplied(it) ? "" : '<span class="note">(判定対象外)</span>';
+      return "<td>" + (it.yondoku[kind] ? "あり ⚠️" : "なし ✅") + off + "</td>";
+    }).join("") + "</tr>";
   }
   html += '<tr><th class="rowh">🚫 NG成分</th>' + list.map(it =>
     "<td>" + ((it.ngHits && it.ngHits.length) ? escapeHtml(it.ngHits.join("・")) : "なし") + "</td>").join("") + "</tr>";
