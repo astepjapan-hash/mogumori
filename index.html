@@ -16,8 +16,8 @@
    ============================================================ */
 :root {
   --bg: #FAFAF5;          /* ベースの白 */
-  --main: #4A7C59;        /* メインの緑 */
-  --accent: #8FBC8F;      /* アクセントの若草色 */
+  --main: #5E9C6B;        /* メインの緑(やわらか若草) */
+  --accent: #A8D5A2;      /* アクセントの若草色 */
   --text: #333;           /* 文字色 */
   --v-best: #2E7D32;      /* ◎ 濃緑 */
   --v-good: #7CB342;      /* ○ 黄緑 */
@@ -256,11 +256,56 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
   background: #F0F5EE; color: var(--main); text-align: left; min-width: 110px;
   position: sticky; left: 0; z-index: 1;
 }
+
+/* 写真の切り取り(トリミング)画面 */
+#crop-overlay {
+  position: fixed; inset: 0; background: #1c211c; z-index: 220;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 12px calc(12px + env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));
+  gap: 10px;
+}
+#crop-overlay .crop-msg { color: #fff; font-size: 0.9rem; text-align: center; line-height: 1.5; }
+#crop-overlay .crop-size { color: var(--accent); font-size: 0.82rem; font-weight: 700; }
+#crop-stage { position: relative; display: inline-block; line-height: 0; touch-action: none; max-width: 100%; }
+#crop-img { display: block; max-width: 100%; max-height: 56vh; user-select: none; -webkit-user-drag: none; }
+#crop-box {
+  position: absolute; border: 2px solid #fff; box-sizing: border-box;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); cursor: move; touch-action: none;
+}
+.crop-handle {
+  position: absolute; width: 30px; height: 30px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--main); box-sizing: border-box; touch-action: none;
+}
+.crop-handle[data-h="nw"] { left: -15px; top: -15px; }
+.crop-handle[data-h="ne"] { right: -15px; top: -15px; }
+.crop-handle[data-h="sw"] { left: -15px; bottom: -15px; }
+.crop-handle[data-h="se"] { right: -15px; bottom: -15px; }
+.crop-actions { display: flex; gap: 8px; width: 100%; max-width: 520px; }
+.crop-actions button { flex: 1; padding: 12px 4px; font-size: 0.88rem; font-weight: 700; }
+
+/* 商品情報の編集欄 */
+.edit-grid { display: grid; grid-template-columns: 76px 1fr; gap: 8px 10px; align-items: center; }
+.edit-grid label { margin: 0; font-size: 0.85rem; }
+.edit-grid input, .edit-grid select { min-height: 42px; padding: 8px 10px; }
+
+/* 分類チップ(タップで絞り込み) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  background: #fff; border: 1.5px solid var(--line); color: #556;
+  border-radius: 999px; padding: 7px 13px; font-size: 0.85rem; font-weight: 600;
+  min-height: 38px; line-height: 1.2;
+}
+.chip.on { background: var(--main); border-color: var(--main); color: #fff; }
+.cat-tag {
+  display: inline-block; background: #EFF5EE; color: var(--main);
+  border-radius: 6px; padding: 1px 7px; font-size: 0.75rem; font-weight: 700; margin-right: 5px;
+}
+.maker-tag { font-size: 0.78rem; color: #889; }
 </style>
 </head>
 <body>
 
-<header>🌿 モグもり <span style="font-size:0.7rem;font-weight:600;opacity:0.85;vertical-align:middle">v1.2</span></header>
+<header>🌿 モグもり <span style="font-size:0.7rem;font-weight:600;opacity:0.85;vertical-align:middle">v1.3</span></header>
 
 <main>
   <!-- ============================================================
@@ -269,27 +314,27 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
   <section id="view-check">
     <div class="card">
       <div class="mode-tabs">
-        <button class="mode-tab active" id="mode-text" onclick="setMode('text')"><span class="emoji">⌨️</span>商品名で<br>チェック</button>
-        <button class="mode-tab" id="mode-label" onclick="setMode('label')"><span class="emoji">📷</span>原材料ラベル<br>を撮影</button>
+        <button class="mode-tab active" id="mode-label" onclick="setMode('label')"><span class="emoji">📷</span>原材料ラベル<br>を撮影</button>
         <button class="mode-tab" id="mode-package" onclick="setMode('package')"><span class="emoji">📦</span>パッケージ<br>を撮影</button>
+        <button class="mode-tab" id="mode-text" onclick="setMode('text')"><span class="emoji">⌨️</span>商品名で<br>チェック</button>
+      </div>
+
+      <!-- 写真入力(ラベル/パッケージ共通) -->
+      <div id="input-photo-area">
+        <p class="note" id="photo-guide">原材料表示のラベル部分を、なるべく大きくハッキリ撮影してください。</p>
+        <div style="margin-top:10px">
+          <button class="btn-main" onclick="document.getElementById('photo-input').click()">📷 カメラで撮影する</button>
+        </div>
+        <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="onPhotoSelected(this)">
       </div>
 
       <!-- 商品名テキスト入力 -->
-      <div id="input-text-area">
+      <div id="input-text-area" class="hidden">
         <input type="text" id="product-name-input" placeholder="例:〇〇ハム あらびきウインナー" autocomplete="off">
         <p class="note">商品名から一般的な原材料をAIが推定して判定します(推定のため実物と異なる場合があります)</p>
         <div style="margin-top:10px">
           <button class="btn-main" onclick="startTextCheck()">🔍 この商品をチェック</button>
         </div>
-      </div>
-
-      <!-- 写真入力(ラベル/パッケージ共通) -->
-      <div id="input-photo-area" class="hidden">
-        <p class="note" id="photo-guide">原材料表示のラベル部分を、なるべく大きくハッキリ撮影してください。</p>
-        <div style="margin-top:10px">
-          <button class="btn-main" onclick="document.getElementById('photo-input').click()">📷 カメラで撮影する</button>
-        </div>
-        <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="startPhotoCheck(this)">
       </div>
 
       <div id="offline-notice" class="info-box hidden" style="margin-top:12px">
@@ -309,6 +354,10 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
       <h2>📋 チェック履歴(最新200件)</h2>
       <button class="btn-sub btn-small" onclick="toggleCompareMode()">⚖️ 比較</button>
     </div>
+    <div class="card">
+      <input type="text" id="hist-search" placeholder="🔍 商品名・メーカーで検索" oninput="renderHistory()">
+      <div class="chips" id="hist-chips"></div>
+    </div>
     <div class="card" id="history-list"><p class="note">まだ履歴がありません。</p></div>
   </section>
 
@@ -321,7 +370,8 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
       <button class="btn-sub btn-small" onclick="toggleCompareMode()">⚖️ 比較</button>
     </div>
     <div class="card">
-      <input type="text" id="fav-search" placeholder="🔍 名前で検索" oninput="renderFavorites()">
+      <input type="text" id="fav-search" placeholder="🔍 商品名・メーカーで検索" oninput="renderFavorites()">
+      <div class="chips" id="fav-chips"></div>
     </div>
     <div class="card" id="favorites-list"><p class="note">まだお気に入りがありません。◎や○の食品を保存しておきましょう。</p></div>
   </section>
@@ -381,6 +431,29 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
     <p class="disclaimer">モグもり v1.2(🔎詳細調査・⚖️くらべる機能つき)<br>本判定は参考情報です。最終的な判断はご自身で行ってください。</p>
   </section>
 </main>
+
+<!-- 写真の切り取り(トリミング)画面 -->
+<div id="crop-overlay" class="hidden">
+  <div class="crop-msg">
+    読み取りたい範囲を指定してください<br>
+    <span style="opacity:0.75">枠を動かす・角の丸をつまんで大きさを変える</span><br>
+    <span class="crop-size" id="crop-size-note"></span>
+  </div>
+  <div id="crop-stage">
+    <img id="crop-img" alt="撮影した写真">
+    <div id="crop-box">
+      <div class="crop-handle" data-h="nw"></div>
+      <div class="crop-handle" data-h="ne"></div>
+      <div class="crop-handle" data-h="sw"></div>
+      <div class="crop-handle" data-h="se"></div>
+    </div>
+  </div>
+  <div class="crop-actions">
+    <button class="btn-sub" onclick="cancelCrop()">✕ 撮り直す</button>
+    <button class="btn-sub" onclick="useWholePhoto()">全体を使う</button>
+    <button class="btn-main" onclick="applyCrop()">✂️ この範囲で読み取る</button>
+  </div>
+</div>
 
 <!-- 比較モードの操作バー(履歴・お気に入りで表示) -->
 <div id="compare-bar" class="hidden">
@@ -477,6 +550,15 @@ const DK_LABELS = {
 // リスクレベルの表示
 const RISK_LABELS = { high: "×要注意", medium: "△注意", low: "○低リスク" };
 
+/* 商品の分類(カテゴリ)
+   履歴・お気に入りでタップして絞り込むときに使います */
+const CATEGORIES = [
+  "砂糖", "塩", "味噌", "醤油", "酢", "油", "みりん・酒",
+  "だし・スープ", "調味料", "肉・ハム", "魚・練り物", "乳製品", "卵",
+  "野菜・果物", "パン", "麺", "米・穀物", "豆・豆腐",
+  "菓子", "飲料", "冷凍食品", "惣菜", "その他"
+];
+
 /* 四毒の判定キーワード
    ※ ごま油・米油・えごま油は「精製植物油」の判定から除外します */
 const YONDOKU = {
@@ -518,7 +600,7 @@ const YONDOKU = {
    3. アプリの状態と共通の小道具
    ============================================================ */
 let MASTER = [];          // additives.json の中身(添加物マスタ)
-let currentMode = "text"; // 入力方法: text / label / package
+let currentMode = "label"; // 入力方法: label / package / text(最初はラベル撮影)
 let lastResult = null;    // 直近の判定結果(お気に入り保存用)
 
 // 文字のゆらぎをそろえる(全角→半角、大文字→小文字、空白除去)
@@ -588,6 +670,20 @@ const store = {
       obj = this._localGet(name);
     }
     return Object.keys(obj).map(k => Object.assign({ key: k }, obj[k]));
+  },
+
+  // 1件書き換え(商品名・メーカー・分類の編集などで使う)
+  async update(name, key, item) {
+    const copy = Object.assign({}, item);
+    delete copy.key;
+    if (useFirebase) {
+      await db.ref("foodChecker/" + name + "/" + key).set(copy);
+      return;
+    }
+    const all = this._localGet(name);
+    if (!all[key]) return;
+    all[key] = copy;
+    this._localSet(name, all);
   },
 
   // 1件削除
@@ -764,33 +860,190 @@ async function callClaudeJson(messages, maxTokens) {
 }
 
 /* ============================================================
-   7. 写真の圧縮(通信量とAPI費用の節約)
+   7. 写真の切り取り(トリミング)と圧縮
    ------------------------------------------------------------
-   長辺1568px以下・JPEG品質0.8に縮小してから送ります。
+   必要な部分だけを切り取ってから、長辺1568px以下・JPEG品質0.8に
+   縮小して送ります。切り取ると送るデータが小さくなるため、
+   読み取りが速くなり、API利用料も安くなります。
    ============================================================ */
-function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const MAX = 1568;
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const long = Math.max(w, h);
-      if (long > MAX) {
-        const scale = MAX / long;
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-      resolve(dataUrl.split(",")[1]); // base64部分だけ返す
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("画像を読み込めませんでした")); };
-    img.src = url;
+
+// 切り取り画面の状態
+const crop = {
+  img: null,        // 読み込んだ画像
+  box: null,        // 選択範囲(表示上の座標)
+  drag: null,       // 操作中の種類(move / nw / ne / sw / se)
+  startX: 0, startY: 0,
+  box0: null
+};
+
+// 写真が選ばれたら、まず切り取り画面を出す
+function onPhotoSelected(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = ""; // 同じ写真をもう一度選べるようにリセット
+  if (!file) return;
+
+  if (!navigator.onLine) {
+    showError(new Error("オフラインのためAI判定は使えません。テキスト入力ならDB照合のみで簡易判定できます"));
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+  const im = $("crop-img");
+  im.onload = () => {
+    URL.revokeObjectURL(url);
+    crop.img = im;
+    $("crop-overlay").classList.remove("hidden");
+    // 画像が画面に描かれてから、初期の選択枠(中央8割)を決める
+    requestAnimationFrame(() => {
+      const r = im.getBoundingClientRect();
+      crop.box = { x: r.width * 0.10, y: r.height * 0.10, w: r.width * 0.80, h: r.height * 0.80 };
+      drawCropBox();
+    });
+  };
+  im.onerror = () => { URL.revokeObjectURL(url); showToast("画像を読み込めませんでした"); };
+  im.src = url;
+}
+
+// 選択枠を画面に反映し、送信サイズの目安も表示する
+function drawCropBox() {
+  const b = crop.box;
+  if (!b) return;
+  const el = $("crop-box");
+  el.style.left = b.x + "px";
+  el.style.top = b.y + "px";
+  el.style.width = b.w + "px";
+  el.style.height = b.h + "px";
+
+  // 実際に送られる画素数から、おおよその読み取り量を計算して表示
+  const im = crop.img;
+  const rect = im.getBoundingClientRect();
+  const scale = im.naturalWidth / rect.width;
+  let sw = Math.round(b.w * scale), sh = Math.round(b.h * scale);
+  const MAX = 1568, long = Math.max(sw, sh);
+  if (long > MAX) { const k = MAX / long; sw = Math.round(sw * k); sh = Math.round(sh * k); }
+  const tokens = Math.round((sw * sh) / 750);
+  const full = (() => {
+    let fw = im.naturalWidth, fh = im.naturalHeight;
+    const fl = Math.max(fw, fh);
+    if (fl > MAX) { const k = MAX / fl; fw = Math.round(fw * k); fh = Math.round(fh * k); }
+    return Math.round((fw * fh) / 750);
+  })();
+  const cut = full > 0 ? Math.max(0, Math.round((1 - tokens / full) * 100)) : 0;
+  $("crop-size-note").textContent =
+    "送信サイズ:約" + tokens.toLocaleString() + "(全体だと約" + full.toLocaleString() + ")" +
+    (cut > 0 ? " → 約" + cut + "%節約" : "");
+}
+
+// 枠のドラッグ操作(指でもマウスでも動くようにpointerイベントを使う)
+function initCropHandlers() {
+  const stage = $("crop-stage");
+  const boxEl = $("crop-box");
+
+  const onDown = (e, kind) => {
+    if (!crop.box) return;
+    e.preventDefault();
+    e.stopPropagation();
+    crop.drag = kind;
+    crop.startX = e.clientX;
+    crop.startY = e.clientY;
+    crop.box0 = Object.assign({}, crop.box);
+    if (e.target.setPointerCapture) { try { e.target.setPointerCapture(e.pointerId); } catch (err) {} }
+  };
+
+  boxEl.addEventListener("pointerdown", (e) => {
+    if (e.target.classList.contains("crop-handle")) return;
+    onDown(e, "move");
   });
+  boxEl.querySelectorAll(".crop-handle").forEach(h => {
+    h.addEventListener("pointerdown", (e) => onDown(e, h.getAttribute("data-h")));
+  });
+
+  const onMove = (e) => {
+    if (!crop.drag || !crop.box0) return;
+    e.preventDefault();
+    const rect = crop.img.getBoundingClientRect();
+    const dx = e.clientX - crop.startX;
+    const dy = e.clientY - crop.startY;
+    const b0 = crop.box0;
+    const MIN = 40;
+    let b = { x: b0.x, y: b0.y, w: b0.w, h: b0.h };
+
+    if (crop.drag === "move") {
+      b.x = b0.x + dx;
+      b.y = b0.y + dy;
+    } else {
+      if (crop.drag.indexOf("w") >= 0) { b.x = b0.x + dx; b.w = b0.w - dx; }
+      if (crop.drag.indexOf("e") >= 0) { b.w = b0.w + dx; }
+      if (crop.drag.indexOf("n") >= 0) { b.y = b0.y + dy; b.h = b0.h - dy; }
+      if (crop.drag.indexOf("s") >= 0) { b.h = b0.h + dy; }
+      // 小さくしすぎないようにする
+      if (b.w < MIN) { if (crop.drag.indexOf("w") >= 0) b.x = b0.x + b0.w - MIN; b.w = MIN; }
+      if (b.h < MIN) { if (crop.drag.indexOf("n") >= 0) b.y = b0.y + b0.h - MIN; b.h = MIN; }
+    }
+    // 画像の外にはみ出さないようにする
+    b.w = Math.min(b.w, rect.width);
+    b.h = Math.min(b.h, rect.height);
+    b.x = Math.max(0, Math.min(b.x, rect.width - b.w));
+    b.y = Math.max(0, Math.min(b.y, rect.height - b.h));
+    crop.box = b;
+    drawCropBox();
+  };
+
+  const onUp = () => { crop.drag = null; crop.box0 = null; };
+  stage.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
+
+function closeCrop() {
+  $("crop-overlay").classList.add("hidden");
+  crop.img = null; crop.box = null; crop.drag = null; crop.box0 = null;
+}
+
+function cancelCrop() { closeCrop(); }
+
+// 切り取らずに写真全体を使う
+function useWholePhoto() {
+  const b64 = renderCropToBase64(false);
+  closeCrop();
+  if (b64) runPhotoCheck(b64);
+}
+
+// 指定した範囲だけを切り取って使う
+function applyCrop() {
+  const b64 = renderCropToBase64(true);
+  closeCrop();
+  if (b64) runPhotoCheck(b64);
+}
+
+// 選択範囲(または全体)を切り出して、縮小したJPEGのbase64を作る
+function renderCropToBase64(useBox) {
+  const im = crop.img;
+  if (!im) return null;
+  const rect = im.getBoundingClientRect();
+  const scale = im.naturalWidth / rect.width;
+
+  let sx = 0, sy = 0, sw = im.naturalWidth, sh = im.naturalHeight;
+  if (useBox && crop.box) {
+    sx = Math.round(crop.box.x * scale);
+    sy = Math.round(crop.box.y * scale);
+    sw = Math.round(crop.box.w * scale);
+    sh = Math.round(crop.box.h * scale);
+    sx = Math.max(0, Math.min(sx, im.naturalWidth - 1));
+    sy = Math.max(0, Math.min(sy, im.naturalHeight - 1));
+    sw = Math.max(1, Math.min(sw, im.naturalWidth - sx));
+    sh = Math.max(1, Math.min(sh, im.naturalHeight - sy));
+  }
+
+  // 長辺1568pxを超えないように縮める
+  let dw = sw, dh = sh;
+  const MAX = 1568, long = Math.max(dw, dh);
+  if (long > MAX) { const k = MAX / long; dw = Math.round(dw * k); dh = Math.round(dh * k); }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = dw; canvas.height = dh;
+  canvas.getContext("2d").drawImage(im, sx, sy, sw, sh, 0, 0, dw, dh);
+  return canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
 }
 
 /* ============================================================
@@ -961,20 +1214,11 @@ async function startTextCheck() {
 }
 
 // ②③ 写真でチェック(原材料ラベル or パッケージ全体)
-async function startPhotoCheck(inputEl) {
-  const file = inputEl.files && inputEl.files[0];
-  inputEl.value = ""; // 同じ写真をもう一度選べるようにリセット
-  if (!file) return;
-
-  if (!navigator.onLine) {
-    showError(new Error("オフラインのためAI判定は使えません。テキスト入力ならDB照合のみで簡易判定できます"));
-    return;
-  }
+// ※切り取り画面で範囲を決めたあと、ここに切り出し済みの画像が渡されます
+async function runPhotoCheck(base64) {
+  if (!base64) { showToast("画像を準備できませんでした"); return; }
 
   try {
-    setLoading("写真を圧縮しています…");
-    const base64 = await compressImage(file);
-
     setLoading("原材料を読み取っています…");
     const isLabel = currentMode === "label";
     const prompt =
@@ -1087,6 +1331,8 @@ async function judgeAndShow(input) {
 
     const result = {
       name: input.productName,
+      maker: "",        // メーカー(あとから編集できます)
+      category: "",     // 分類(あとから編集できます)
       verdict,
       date: new Date().toISOString(),
       inputType: input.inputType,
@@ -1125,6 +1371,49 @@ function showError(e) {
 /* ============================================================
    12. 判定結果の表示
    ============================================================ */
+
+/* 商品名・メーカー・分類の編集欄を作る(結果画面の共通部品) */
+function buildEditBlockHtml(r) {
+  let opts = '<option value="">(未設定)</option>';
+  for (const c of CATEGORIES) {
+    opts += '<option value="' + escapeHtml(c) + '"' + (r.category === c ? " selected" : "") + ">" + escapeHtml(c) + "</option>";
+  }
+  return '<div class="ing-item" style="border-top:none">' +
+    '<div class="ing-head" onclick="this.nextElementSibling.classList.toggle(\'hidden\')">' +
+      '<span class="ing-name">✏️ 商品名・メーカー・分類を編集</span><span>▾</span>' +
+    '</div>' +
+    '<div class="ing-detail hidden">' +
+      '<div class="edit-grid">' +
+        '<label for="edit-name">商品名</label><input type="text" id="edit-name" value="' + escapeHtml(r.name || "") + '">' +
+        '<label for="edit-maker">メーカー</label><input type="text" id="edit-maker" placeholder="例:〇〇食品" value="' + escapeHtml(r.maker || "") + '">' +
+        '<label for="edit-category">分類</label><select id="edit-category">' + opts + '</select>' +
+      '</div>' +
+      '<div style="margin-top:10px"><button class="btn-sub" style="width:100%" onclick="saveProductInfo()">💾 この内容で保存</button></div>' +
+      '<p class="note">履歴にも反映されます。分類を付けておくと、履歴画面でタップして絞り込めます。</p>' +
+    '</div>' +
+  '</div>';
+}
+
+/* 四毒チェックの枠を作る。まだ実行していない場合は「今すぐ実行」ボタンを出す */
+function buildYondokuBlockHtml(r) {
+  let html = '<h2 style="margin-top:16px">☠️ 四毒チェック</h2>';
+  if (r.yondoku) {
+    html += '<div class="yondoku-grid">';
+    for (const kind of Object.keys(YONDOKU)) {
+      const def = YONDOKU[kind];
+      const hit = r.yondoku[kind];
+      html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
+    }
+    html += "</div>";
+  } else if (r.ingredients && r.ingredients.length > 0) {
+    html += '<div class="info-box" style="margin-bottom:8px">この判定では四毒チェックをしていません(設定でオフのため)。この商品だけ、今から調べられます。</div>';
+    html += '<button class="btn-sub" style="width:100%" onclick="runYondokuNow()">☠️ 四毒チェックを実行する</button>';
+  } else {
+    html += '<p class="note">原材料の情報がないため、四毒チェックはできません。</p>';
+  }
+  return html;
+}
+
 function renderResult(r, containerEl, showSaveButton) {
   window.__shownResult = r; // 「詳細調査」「お気に入り保存」ボタンが参照する
   const v = VERDICTS[r.verdict] || VERDICTS["△"];
@@ -1133,7 +1422,15 @@ function renderResult(r, containerEl, showSaveButton) {
   // 大きな判定マーク
   html += '<div class="verdict-circle" style="background:' + v.color + '">' + r.verdict + "</div>";
   html += '<div class="verdict-label" style="color:' + v.color + '">' + escapeHtml(v.label) + "</div>";
-  html += '<div style="text-align:center;font-weight:700;margin-bottom:8px">' + escapeHtml(r.name || "") + "</div>";
+  html += '<div style="text-align:center;font-weight:700;margin-bottom:4px">' + escapeHtml(r.name || "") + "</div>";
+  if (r.category || r.maker) {
+    html += '<div style="text-align:center;margin-bottom:8px">' +
+      (r.category ? '<span class="cat-tag">' + escapeHtml(r.category) + "</span>" : "") +
+      (r.maker ? '<span class="maker-tag">' + escapeHtml(r.maker) + "</span>" : "") + "</div>";
+  }
+
+  // 商品名・メーカー・分類の編集欄
+  html += buildEditBlockHtml(r);
 
   // 推定・オフライン・パッケージ撮影の注意書き
   if (r.estimated) {
@@ -1173,16 +1470,8 @@ function renderResult(r, containerEl, showSaveButton) {
     html += '<p class="note" style="margin-top:12px">検出された添加物はありません。</p>';
   }
 
-  // 四毒チェック結果(別枠で4項目)
-  if (r.yondoku) {
-    html += '<h2 style="margin-top:16px">☠️ 四毒チェック</h2><div class="yondoku-grid">';
-    for (const kind of Object.keys(YONDOKU)) {
-      const def = YONDOKU[kind];
-      const hit = r.yondoku[kind];
-      html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
-    }
-    html += "</div>";
-  }
+  // 四毒チェック結果(別枠で4項目。未実施なら実行ボタン)
+  html += buildYondokuBlockHtml(r);
 
   // カスタムNG
   if (r.ngHits && r.ngHits.length > 0) {
@@ -1213,12 +1502,79 @@ function renderResult(r, containerEl, showSaveButton) {
 }
 
 /* ============================================================
+   12-2. 商品情報の編集・四毒チェックの後追い実行
+   ============================================================ */
+
+/* 表示中の結果を、保存済みの履歴・お気に入りにも書き戻す */
+async function persistShownResult(r) {
+  const clean = Object.assign({}, r);
+  delete clean.key;
+  if (r.historyKey) {
+    const keep = clean.historyKey; delete clean.historyKey;
+    await store.update("history", r.historyKey, clean);
+    clean.historyKey = keep;
+  }
+  if (r.favoriteKey) {
+    const clean2 = Object.assign({}, clean);
+    delete clean2.historyKey; delete clean2.favoriteKey;
+    await store.update("favorites", r.favoriteKey, clean2);
+  }
+}
+
+/* 商品名・メーカー・分類を保存する */
+async function saveProductInfo() {
+  const r = window.__shownResult;
+  if (!r) { showToast("編集する判定結果がありません"); return; }
+  const nameEl = $("edit-name"), makerEl = $("edit-maker"), catEl = $("edit-category");
+  if (!nameEl) return;
+  const newName = nameEl.value.trim();
+  if (!newName) { showToast("商品名を入力してください"); return; }
+
+  r.name = newName;
+  r.maker = makerEl ? makerEl.value.trim() : "";
+  r.category = catEl ? catEl.value : "";
+
+  try {
+    await persistShownResult(r);
+    showToast("💾 保存しました");
+    // 画面を作り直して、見出しのタグ表示にも反映する
+    if (r.detailData) renderDetailResult(r, $("result-area"));
+    else renderResult(r, $("result-area"), !!r.historyKey);
+  } catch (e) {
+    showToast("保存に失敗しました:" + (e.message || ""));
+  }
+}
+
+/* 四毒チェックをあとから実行する(設定がオフのまま判定した商品用) */
+async function runYondokuNow() {
+  const r = window.__shownResult;
+  if (!r) { showToast("判定結果がありません"); return; }
+  if (!r.ingredients || r.ingredients.length === 0) { showToast("原材料の情報がないため実行できません"); return; }
+
+  r.yondoku = checkYondoku(r.ingredients);
+  // 四毒の結果を含めて総合判定を計算し直す
+  r.verdict = computeVerdict(r.details || [], r.yondoku, r.ngHits || [], true);
+  r.summary = buildSummary(r.verdict, r.details || [], r.yondoku, r.ngHits || [], true);
+
+  try {
+    await persistShownResult(r);
+    const hits = Object.keys(YONDOKU).filter(k => r.yondoku[k]).map(k => YONDOKU[k].label);
+    showToast(hits.length ? "☠️ 四毒:" + hits.join("・") + " を検出" : "✅ 四毒は見つかりませんでした");
+    if (r.detailData) renderDetailResult(r, $("result-area"));
+    else renderResult(r, $("result-area"), !!r.historyKey);
+  } catch (e) {
+    showToast("保存に失敗しました:" + (e.message || ""));
+  }
+}
+
+/* ============================================================
    13. 履歴
    ============================================================ */
 async function saveHistory(result) {
   try {
     const item = Object.assign({}, result);
-    await store.add("history", item);
+    delete item.historyKey; delete item.favoriteKey; delete item.key;
+    result.historyKey = await store.add("history", item);
     // 200件を超えたら古い順に自動削除
     const all = await store.list("history");
     if (all.length > 200) {
@@ -1231,14 +1587,48 @@ async function saveHistory(result) {
   }
 }
 
-async function renderHistory() {
-  const el = $("history-list");
-  const all = await store.list("history");
-  if (all.length === 0) {
-    el.innerHTML = '<p class="note">まだ履歴がありません。</p>';
+/* 分類の絞り込みボタン(チップ)を作る。
+   実際に登録されている分類だけを、使われている数の多い順に並べます */
+function renderChips(items, containerId, selected, onclickName) {
+  const box = $(containerId);
+  if (!box) return;
+  const counts = {};
+  items.forEach(it => { if (it.category) counts[it.category] = (counts[it.category] || 0) + 1; });
+  const cats = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b));
+  if (cats.length === 0) {
+    box.innerHTML = '<span class="note">分類を登録すると、ここにボタンが出てタップで絞り込めます。</span>';
     return;
   }
-  all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  let html = '<button class="chip' + (selected ? "" : " on") + '" onclick="' + onclickName + '(\'\')">すべて</button>';
+  cats.forEach(c => {
+    html += '<button class="chip' + (selected === c ? " on" : "") + '" onclick="' + onclickName + '(' + JSON.stringify(c) + ')">' +
+      escapeHtml(c) + "(" + counts[c] + ")</button>";
+  });
+  box.innerHTML = html;
+}
+
+// 選ばれている分類(履歴用・お気に入り用)
+let histCat = "";
+let favCat = "";
+function setHistCat(c) { histCat = c; renderHistory(); }
+function setFavCat(c) { favCat = c; renderFavorites(); }
+
+async function renderHistory() {
+  const el = $("history-list");
+  const all0 = await store.list("history");
+  all0.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  renderChips(all0, "hist-chips", histCat, "setHistCat");
+
+  // 文字検索(商品名・メーカー)と分類での絞り込み
+  const q = norm(($("hist-search") && $("hist-search").value) || "");
+  let all = all0;
+  if (histCat) all = all.filter(x => x.category === histCat);
+  if (q) all = all.filter(x => norm(x.name).includes(q) || norm(x.maker).includes(q));
+
+  if (all.length === 0) {
+    el.innerHTML = '<p class="note">' + (all0.length === 0 ? "まだ履歴がありません。" : "条件に合う履歴がありません。") + "</p>";
+    return;
+  }
   const typeLabel = { text: "⌨️ 商品名", label: "📷 ラベル", package: "📦 パッケージ", detail: "🔎 詳細調査" };
   el.innerHTML = all.map(item => {
     const v = VERDICTS[item.verdict] || VERDICTS["△"];
@@ -1248,8 +1638,11 @@ async function renderHistory() {
       '<div class="list-head" onclick="toggleDetail(this)">' +
         (compareMode ? '<input type="checkbox" class="chkbox"' + (compareSel["history|" + item.key] ? " checked" : "") + " onclick='event.stopPropagation(); toggleCompareSel(\"history\", " + JSON.stringify(item.key) + ", this)'>" : "") +
         '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
-        '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div>" +
-        '<div class="list-date">' + dateStr + " ・ " + (typeLabel[item.inputType] || "") + "</div></div><span>▾</span>" +
+        '<div style="flex:1"><div class="list-title">' +
+          (item.category ? '<span class="cat-tag">' + escapeHtml(item.category) + "</span>" : "") +
+          escapeHtml(item.name || "(名称不明)") + "</div>" +
+        '<div class="list-date">' + dateStr + " ・ " + (typeLabel[item.inputType] || "") +
+          (item.maker ? " ・ " + escapeHtml(item.maker) : "") + "</div></div><span>▾</span>" +
       "</div>" +
       '<div class="hidden">' +
         '<div class="list-actions">' +
@@ -1271,6 +1664,9 @@ async function showStoredResult(key, listName) {
   const all = await store.list(listName);
   const item = all.find(x => x.key === key);
   if (!item) { showToast("データが見つかりません"); return; }
+  // どの記録を開いたかを覚えておき、編集内容を同じ場所へ書き戻せるようにする
+  delete item.key;
+  if (listName === "history") item.historyKey = key; else item.favoriteKey = key;
   switchTab("check");
   if (item.detailData) {
     renderDetailResult(item, $("result-area")); // 詳細調査の結果はブロック形式で表示
@@ -1293,8 +1689,8 @@ async function deleteItem(listName, key) {
 async function saveFavoriteFromLast() {
   if (!lastResult) { showToast("先に判定を実行してください"); return; }
   const copy = Object.assign({}, lastResult);
-  delete copy.key;
-  await store.add("favorites", copy);
+  delete copy.key; delete copy.historyKey; delete copy.favoriteKey;
+  lastResult.favoriteKey = await store.add("favorites", copy);
   showToast("⭐ お気に入りに保存しました");
 }
 
@@ -1311,11 +1707,15 @@ async function addFavoriteFromHistory(key) {
 async function renderFavorites() {
   const el = $("favorites-list");
   const q = norm($("fav-search").value);
-  let all = await store.list("favorites");
-  all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  if (q) all = all.filter(x => norm(x.name).includes(q));
+  const all0 = await store.list("favorites");
+  all0.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  renderChips(all0, "fav-chips", favCat, "setFavCat");
+
+  let all = all0;
+  if (favCat) all = all.filter(x => x.category === favCat);
+  if (q) all = all.filter(x => norm(x.name).includes(q) || norm(x.maker).includes(q));
   if (all.length === 0) {
-    el.innerHTML = '<p class="note">' + (q ? "検索に一致するお気に入りがありません。" : "まだお気に入りがありません。◎や○の食品を保存しておきましょう。") + "</p>";
+    el.innerHTML = '<p class="note">' + (all0.length === 0 ? "まだお気に入りがありません。◎や○の食品を保存しておきましょう。" : "条件に合うお気に入りがありません。") + "</p>";
     return;
   }
   el.innerHTML = all.map(item => {
@@ -1324,7 +1724,11 @@ async function renderFavorites() {
       '<div class="list-head" onclick="toggleDetail(this)">' +
         (compareMode ? '<input type="checkbox" class="chkbox"' + (compareSel["favorites|" + item.key] ? " checked" : "") + " onclick='event.stopPropagation(); toggleCompareSel(\"favorites\", " + JSON.stringify(item.key) + ", this)'>" : "") +
         '<div class="list-verdict" style="background:' + v.color + '">' + item.verdict + "</div>" +
-        '<div style="flex:1"><div class="list-title">' + escapeHtml(item.name || "(名称不明)") + "</div></div><span>▾</span>" +
+        '<div style="flex:1"><div class="list-title">' +
+          (item.category ? '<span class="cat-tag">' + escapeHtml(item.category) + "</span>" : "") +
+          escapeHtml(item.name || "(名称不明)") + "</div>" +
+          (item.maker ? '<div class="list-date">' + escapeHtml(item.maker) + "</div>" : "") +
+        "</div><span>▾</span>" +
       "</div>" +
       '<div class="hidden">' +
         '<div class="list-actions">' +
@@ -1596,8 +2000,11 @@ async function startDetailCheck(productName) {
     const ngHits = checkCustomNG(ingredients, json.productName || productName, ngList);
     const verdict = computeVerdict(items, yondoku, ngHits, yondokuEnabled);
 
+    const prev = window.__shownResult || {};
     const result = {
       name: String(json.productName || productName),
+      maker: prev.maker || "",       // 元の判定で入力した情報を引き継ぐ
+      category: prev.category || "",
       verdict,
       date: new Date().toISOString(),
       inputType: "detail",
@@ -1640,7 +2047,13 @@ function renderDetailResult(r, containerEl) {
   html += '<div style="text-align:center;margin-bottom:6px"><span class="src-label" style="font-size:0.8rem">🔎 詳細調査(Web検索で裏付け)</span></div>';
   html += '<div class="verdict-circle" style="background:' + v.color + '">' + r.verdict + "</div>";
   html += '<div class="verdict-label" style="color:' + v.color + '">' + escapeHtml(v.label) + "</div>";
-  html += '<div style="text-align:center;font-weight:700;margin-bottom:8px">' + escapeHtml(r.name || "") + "</div>";
+  html += '<div style="text-align:center;font-weight:700;margin-bottom:4px">' + escapeHtml(r.name || "") + "</div>";
+  if (r.category || r.maker) {
+    html += '<div style="text-align:center;margin-bottom:8px">' +
+      (r.category ? '<span class="cat-tag">' + escapeHtml(r.category) + "</span>" : "") +
+      (r.maker ? '<span class="maker-tag">' + escapeHtml(r.maker) + "</span>" : "") + "</div>";
+  }
+  html += buildEditBlockHtml(r);
 
   if (!d.confirmed) {
     html += '<div class="info-box">💡 メーカー公式・通販の原材料情報が見つからなかったため、AIの一般知識で補って評価しています。</div>';
@@ -1697,16 +2110,8 @@ function renderDetailResult(r, containerEl) {
     html += '<h2>📝 総合評価コメント</h2><div class="verdict-summary">' + escapeHtml(d.comment).replace(/\n/g, "<br>") + "</div>";
   }
 
-  // 四毒チェック(通常判定と同じ枠)
-  if (r.yondoku) {
-    html += '<h2>☠️ 四毒チェック</h2><div class="yondoku-grid">';
-    for (const kind of Object.keys(YONDOKU)) {
-      const def = YONDOKU[kind];
-      const hit = r.yondoku[kind];
-      html += '<div class="yondoku-cell' + (hit ? " hit" : "") + '">' + def.emoji + " " + def.label + ":" + (hit ? "あり ⚠️" : "なし ✅") + "</div>";
-    }
-    html += "</div>";
-  }
+  // 四毒チェック(通常判定と同じ枠。未実施なら実行ボタン)
+  html += buildYondokuBlockHtml(r);
   if (r.ngHits && r.ngHits.length > 0) {
     html += '<div class="alert-box" style="margin-top:12px">🚫 NG成分:' + escapeHtml(r.ngHits.join("・")) + "</div>";
   }
@@ -1890,6 +2295,8 @@ window.addEventListener("load", async () => {
     : "保存先:この端末の中(Firebase未設定のため。設定方法はREADME参照)";
 
   updateOnlineStatus();
+  setMode(currentMode);      // 最初は「原材料ラベルを撮影」を選んだ状態にする
+  initCropHandlers();        // 写真の切り取り操作を使えるようにする
   await loadMaster();
 
   // ホーム画面用アプリとして動くための登録(Service Worker)
