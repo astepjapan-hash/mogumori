@@ -296,6 +296,15 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
   min-height: 38px; line-height: 1.2;
 }
 .chip.on { background: var(--main); border-color: var(--main); color: #fff; }
+/* 新しい版のお知らせ帯 */
+#update-notice {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  background: var(--main); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  gap: 4px; padding: 10px 12px; font-size: 0.88rem; font-weight: 600;
+  z-index: 96; box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+}
 .cat-tag {
   display: inline-block; background: #EFF5EE; color: var(--main);
   border-radius: 6px; padding: 1px 7px; font-size: 0.75rem; font-weight: 700; margin-right: 5px;
@@ -329,7 +338,7 @@ table.cmp { border-collapse: collapse; font-size: 0.85rem; background: #fff; }
           ✂️ 撮影した<b>あと</b>に、読み取る範囲を切り取る画面が出ます。<br>
           必要な部分だけにすると読み取りが速くなり、利用料も安くなります。
         </div>
-        <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="onPhotoSelected(this)">
+        <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" autocomplete="off" onchange="onPhotoSelected(this)">
       </div>
 
       <!-- 商品名テキスト入力 -->
@@ -538,7 +547,7 @@ try {
 /* アプリの版数。
    ★更新したときは、この2行だけ直せば画面の2か所(上の帯・設定画面)に
      自動で反映されます。あわせて sw.js の CACHE_VERSION も上げてください。 */
-const APP_VERSION = "v1.3.1";
+const APP_VERSION = "v1.3.2";
 const APP_VERSION_NOTE = "✂️切り取り・✏️編集・🏷️分類・☠️四毒の後追い";
 
 // 判定マークの表示設定
@@ -2324,6 +2333,20 @@ function switchTab(name) {
 function updateOnlineStatus() {
   $("offline-notice").classList.toggle("hidden", navigator.onLine);
 }
+
+/* 新しい版が用意できたことを知らせる帯を出す(自動では読み込み直さない)。
+   カメラや切り取り画面を使っている最中は、じゃまをしないよう出しません。 */
+function showUpdateNotice() {
+  if ($("update-notice")) return;
+  const busy = !$("crop-overlay").classList.contains("hidden") || !$("loading").classList.contains("hidden");
+  if (busy) { setTimeout(showUpdateNotice, 4000); return; } // 作業が終わってから出す
+  const bar = document.createElement("div");
+  bar.id = "update-notice";
+  bar.innerHTML = '🔄 新しい版が用意できました ' +
+    '<button class="btn-small" style="background:#fff;color:var(--main);font-weight:700;margin-left:8px" onclick="location.reload()">更新する</button>' +
+    '<button class="btn-small" style="background:rgba(255,255,255,0.25);color:#fff;margin-left:6px" onclick="this.parentElement.remove()">あとで</button>';
+  document.body.appendChild(bar);
+}
 window.addEventListener("online", updateOnlineStatus);
 window.addEventListener("offline", updateOnlineStatus);
 
@@ -2341,19 +2364,27 @@ window.addEventListener("load", async () => {
   $("app-version-note").textContent = "モグもり " + APP_VERSION + "(" + APP_VERSION_NOTE + ")";
 
   updateOnlineStatus();
+  // 前回の撮影状態がiPhoneに残っていると勝手にカメラが開くことがあるため、毎回消す
+  const pi = $("photo-input");
+  if (pi) pi.value = "";
+  $("crop-overlay").classList.add("hidden");
+
   setMode(currentMode);      // 最初は「原材料ラベルを撮影」を選んだ状態にする
   initCropHandlers();        // 写真の切り取り操作を使えるようにする
   await loadMaster();
 
   // ホーム画面用アプリとして動くための登録(Service Worker)
   if ("serviceWorker" in navigator) {
-    // 新しい版に切り替わったら、画面を1回だけ自動で読み込み直す
-    // (更新のたびに手で開き直さなくても、最新画面に切り替わるようにする)
-    let reloadedOnce = false;
+    /* 新しい版に切り替わったとき:
+       以前は画面を自動で読み込み直していましたが、カメラ操作中に
+       割り込んで「勝手にカメラが起動する」原因になったため取りやめました。
+       いまは案内を出すだけで、読み込み直すかどうかは利用者が決めます。
+       (通信できるときは常に最新を取りに行く方式なので、次に開けば最新になります) */
+    let noticeShown = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloadedOnce) return;
-      reloadedOnce = true;
-      window.location.reload();
+      if (noticeShown) return;
+      noticeShown = true;
+      showUpdateNotice();
     });
 
     navigator.serviceWorker.register("sw.js").then((reg) => {
